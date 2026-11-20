@@ -1,6 +1,8 @@
 import * as XLSX from 'xlsx';
+import { getShiftFromExcelCell } from './shiftUtils';
 
 export const DEFAULT_COMMENTS_CATALOG = [
+  'Operacion',
   'En cero físico',
   'Reabasto pendiente',
   'Diferencia de inventario',
@@ -17,6 +19,19 @@ export const DEFAULT_CONFIG = {
   uda5: [],
   commentsCatalog: DEFAULT_COMMENTS_CATALOG,
 };
+
+export function normalizeCommentText(str) {
+  return String(str || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+export function isOperacionComment(comment) {
+  const norm = normalizeCommentText(comment);
+  return norm === 'operacion';
+}
 
 export function extractConfigFromWorkbook(workbook) {
   const configSheet = workbook.Sheets['Config'];
@@ -77,13 +92,16 @@ export function parseBaseRecords(workbook) {
     const paqexist = String(r[3 + offset] ?? '').trim();
     const pivote = String(r[4 + offset] ?? '').trim();
     const producto = String(r[5 + offset] ?? '').trim();
-    const usuario = String(r[6 + offset] ?? '').trim();
+    const usuario = String(r[6 + offset] ?? '').trim() || 'SIN USUARIO';
 
     if (!fecha && !item && !pivote) continue;
+
+    const detectedShift = getShiftFromExcelCell(fecha);
 
     records.push({
       total: 1,
       fecha,
+      turno: detectedShift ? detectedShift.id : 'Sin turno',
       item,
       paq,
       paqexist,
@@ -114,7 +132,12 @@ function aggregateReport(filteredRows, { includeUda = false, sortDescending = tr
       : `${row.item}||${row.producto}||${row.pivote}||${row.paqexist}`;
 
     if (map.has(key)) {
-      map.get(key).sumaTotal += 1;
+      const existing = map.get(key);
+      existing.sumaTotal += 1;
+      existing.userBreakdown[row.usuario] = (existing.userBreakdown[row.usuario] || 0) + 1;
+      if (row.turno && !existing.turnos.includes(row.turno)) {
+        existing.turnos.push(row.turno);
+      }
     } else {
       map.set(key, {
         id: key,
@@ -125,6 +148,8 @@ function aggregateReport(filteredRows, { includeUda = false, sortDescending = tr
         ...(includeUda ? { uda: row.uda } : {}),
         sumaTotal: 1,
         comentario: '',
+        userBreakdown: { [row.usuario]: 1 },
+        turnos: row.turno ? [row.turno] : [],
       });
     }
   }
@@ -138,13 +163,18 @@ function aggregateReport(filteredRows, { includeUda = false, sortDescending = tr
   return result;
 }
 
-export function runLneAnalysis(baseRecords, config) {
+export function runLneAnalysis(baseRecords, config, selectedShiftId = 'ALL') {
   const uda5Set = new Set((config.uda5 || []).map((x) => String(x).trim()));
 
-  const rawPiezas = baseRecords.filter((r) => matchesAllowedAisle(r.pivote, config.piezas));
+  const shiftFiltered =
+    !selectedShiftId || selectedShiftId === 'ALL'
+      ? baseRecords
+      : baseRecords.filter((r) => r.turno === selectedShiftId);
+
+  const rawPiezas = shiftFiltered.filter((r) => matchesAllowedAisle(r.pivote, config.piezas));
   const piezas = aggregateReport(rawPiezas, { includeUda: false, sortDescending: true });
 
-  const rawRefri = baseRecords
+  const rawRefri = shiftFiltered
     .filter((r) => matchesAllowedAisle(r.pivote, config.refri))
     .map((r) => ({
       ...r,
@@ -152,7 +182,7 @@ export function runLneAnalysis(baseRecords, config) {
     }));
   const refri = aggregateReport(rawRefri, { includeUda: true, sortDescending: false });
 
-  const rawCajas = baseRecords.filter((r) => matchesAllowedAisle(r.pivote, config.cajas));
+  const rawCajas = shiftFiltered.filter((r) => matchesAllowedAisle(r.pivote, config.cajas));
   const cajas = aggregateReport(rawCajas, { includeUda: false, sortDescending: true });
 
   return {
@@ -160,7 +190,7 @@ export function runLneAnalysis(baseRecords, config) {
     refri,
     cajas,
     stats: {
-      totalBase: baseRecords.length,
+      totalBase: shiftFiltered.length,
       piezasRows: rawPiezas.length,
       refriRows: rawRefri.length,
       cajasRows: rawCajas.length,
@@ -186,4 +216,40 @@ export function summarizeComments(reportRows) {
     .sort((a, b) => b.totalItems - a.totalItems);
 
   return { list, sinComentario };
+}
+
+/**
+ * Calcula los usuarios que acumulan líneas/eventos con el comentario "Operacion"
+ */
+export function summarizeOperacionUsers(reportRows) {
+  const userMap = new Map();
+  let matchingLinesCount = 0;
+
+  for (const row of reportRows) {
+    if (!isOperacionComment(row.comentario)) continue;
+    matchingLinesCount += 1;
+
+    const breakdown = row.userBreakdown || {};
+    const entries = Object.entries(breakdown);
+
+    if (entries.length === 0) {
+      const prev = userMap.get('SIN USUARIO') || { usuario: 'SIN USUARIO', lineas: 0, eventos: 0 };
+      prev.lineas += 1;
+      prev.eventos += row.sumaTotal || 1;
+      userMap.set('SIN USUARIO', prev);
+    } else {
+      for (const [usuario, count] of entries) {
+        const prev = userMap.get(usuario) || { usuario, lineas: 0, eventos: 0 };
+        prev.lineas += 1;
+        prev.eventos += count;
+        userMap.set(usuario, prev);
+      }
+    }
+  }
+
+  const users = Array.from(userMap.values()).sort(
+    (a, b) => b.lineas - a.lineas || b.eventos - a.eventos
+  );
+
+  return { users, matchingLinesCount };
 }

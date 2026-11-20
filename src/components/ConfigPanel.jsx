@@ -31,6 +31,11 @@ export default function ConfigPanel({ config, onSaveConfig, onResetDefaults }) {
   const handleSave = (e) => {
     e.preventDefault();
     const parsedComments = parseLines(commentsText);
+    // Garantizar que "Operacion" siempre esté disponible en el catálogo
+    if (!parsedComments.some((c) => c.toLowerCase() === 'operacion' || c.toLowerCase() === 'operación')) {
+      parsedComments.unshift('Operacion');
+    }
+
     onSaveConfig({
       piezas: parseLines(piezasText),
       refri: parseLines(refriText),

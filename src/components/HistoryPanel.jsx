@@ -14,7 +14,7 @@ export default function HistoryPanel({ history, activeHistoryId, onLoadEntry, on
               Histórico de Archivos Excel Subidos
             </h2>
             <p className="text-xs text-slate-500">
-              Cada carga se guarda automáticamente con su turno detectado y comentarios capturados.
+              Cada carga se guarda automáticamente con sus turnos y comentarios capturados.
             </p>
           </div>
         </div>
@@ -54,7 +54,7 @@ export default function HistoryPanel({ history, activeHistoryId, onLoadEntry, on
                   <div className="flex items-start justify-between gap-2">
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-oxxoDark text-white">
                       <Clock className="w-3 h-3 text-oxxoYellow" />
-                      {entry.shift?.shortLabel || 'Turno N/D'}
+                      {entry.shift?.shortLabel || 'General'}
                     </span>
                     {isCurrent && (
                       <span className="text-[10px] font-bold uppercase tracking-wider text-oxxoRed bg-red-100 px-2 py-0.5 rounded">

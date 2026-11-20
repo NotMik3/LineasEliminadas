@@ -17,7 +17,7 @@ export default function FileUploader({ onFileLoaded, error, historyCount, onOpen
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
         <div className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
           <Clock className="w-3.5 h-3.5 text-oxxoRed" />
-          Turno actual detectado: <span className="text-slate-900 font-bold">{currentShift.label}</span>
+          Turno en curso: <span className="text-slate-900 font-bold">{currentShift.label}</span>
         </div>
 
         {historyCount > 0 && (

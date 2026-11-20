@@ -8,8 +8,16 @@ import {
   Filter,
   CheckSquare,
   XCircle,
+  Users,
+  Clock,
 } from 'lucide-react';
-import { summarizeComments, DEFAULT_COMMENTS_CATALOG } from '../utils/lneProcessor';
+import {
+  summarizeComments,
+  summarizeOperacionUsers,
+  DEFAULT_COMMENTS_CATALOG,
+  isOperacionComment,
+} from '../utils/lneProcessor';
+import { SHIFT_OPTIONS } from '../utils/shiftUtils';
 
 const BAR_COLORS = [
   'bg-oxxoRed',
@@ -26,6 +34,9 @@ export default function ReportTable({
   rows,
   includeUda = false,
   commentsCatalog = DEFAULT_COMMENTS_CATALOG,
+  selectedShiftId = 'ALL',
+  onSelectShift,
+  shiftCounts = {},
   onUpdateComment,
   onBulkUpdateComments,
 }) {
@@ -83,12 +94,14 @@ export default function ReportTable({
 
     const filtered = rows.filter((r) => {
       if (q) {
+        const userNames = Object.keys(r.userBreakdown || {}).join(' ').toLowerCase();
         const matchesGlobal =
           r.item.toLowerCase().includes(q) ||
           r.producto.toLowerCase().includes(q) ||
           r.pivote.toLowerCase().includes(q) ||
           (r.uda && r.uda.toLowerCase().includes(q)) ||
-          (r.comentario && r.comentario.toLowerCase().includes(q));
+          (r.comentario && r.comentario.toLowerCase().includes(q)) ||
+          userNames.includes(q);
         if (!matchesGlobal) return false;
       }
 
@@ -155,10 +168,21 @@ export default function ReportTable({
     [rows]
   );
 
+  // Gráfica especial cuando se detecta "Operacion"
+  const { users: operacionUsers, matchingLinesCount: operacionLinesCount } = useMemo(
+    () => summarizeOperacionUsers(rows),
+    [rows]
+  );
+
   const maxChartCount = useMemo(() => {
     if (commentSummary.length === 0) return 1;
     return Math.max(...commentSummary.map((c) => c.totalItems));
   }, [commentSummary]);
+
+  const maxUserLinesCount = useMemo(() => {
+    if (operacionUsers.length === 0) return 1;
+    return Math.max(...operacionUsers.map((u) => u.lineas));
+  }, [operacionUsers]);
 
   const allVisibleSelected =
     processedRows.length > 0 && processedRows.every((r) => selectedIds.has(r.id));
@@ -218,7 +242,7 @@ export default function ReportTable({
             <p className="text-xs text-red-100">CONTROL Y SEGUIMIENTO • CEDIS SALTILLO</p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setShowColumnFilters((prev) => !prev)}
@@ -238,12 +262,61 @@ export default function ReportTable({
               className="inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/40 text-xs font-bold px-3.5 py-2 rounded-lg transition"
             >
               <BarChart3 className="w-4 h-4" />
-              {showSummary ? 'Ocultar Gráfica' : 'Ver Gráfica'}
+              {showSummary ? 'Ocultar Gráficas' : 'Ver Gráficas'}
             </button>
           </div>
         </div>
 
-        <div className="bg-oxxoDark text-white px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+        {/* Selector rápido de Turno / Vista General */}
+        <div className="bg-slate-800 text-white px-5 py-2 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-slate-300 font-semibold mr-1">
+              <Clock className="w-3.5 h-3.5 text-oxxoYellow" />
+              Vista de turno:
+            </span>
+            {SHIFT_OPTIONS.map((opt) => {
+              const isActive = selectedShiftId === opt.id;
+              const count = shiftCounts[opt.id] ?? 0;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => onSelectShift(opt.id)}
+                  className={`px-2.5 py-1 rounded-md font-bold transition ${
+                    isActive
+                      ? 'bg-oxxoYellow text-slate-900 shadow-sm'
+                      : 'bg-slate-700/80 text-slate-200 hover:bg-slate-600'
+                  }`}
+                >
+                  {opt.shortLabel}
+                  {typeof shiftCounts[opt.id] === 'number' && (
+                    <span
+                      className={`ml-1.5 text-[10px] px-1.5 py-0.2 rounded-full ${
+                        isActive ? 'bg-slate-900/15 text-slate-900' : 'bg-black/30 text-slate-300'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar ítem, producto, usuario..."
+              className="w-full bg-white text-slate-800 rounded-md pl-8 pr-3 py-1 text-xs focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Sub-barra de métricas */}
+        <div className="bg-oxxoDark text-white px-5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex flex-wrap items-center gap-4">
             <span>
               Mostrando: <strong className="text-oxxoYellow">{processedRows.length}</strong> de{' '}
@@ -265,19 +338,16 @@ export default function ReportTable({
             )}
           </div>
 
-          <div className="relative w-full sm:w-72">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Búsqueda rápida en toda la tabla..."
-              className="w-full bg-white text-slate-800 rounded-md pl-8 pr-3 py-1 text-xs focus:outline-none"
-            />
-          </div>
+          {operacionLinesCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 bg-red-600/30 border border-red-400/40 text-amber-200 px-2.5 py-0.5 rounded font-semibold">
+              <Users className="w-3.5 h-3.5 text-oxxoYellow" />
+              {operacionLinesCount} {operacionLinesCount === 1 ? 'línea marcada' : 'líneas marcadas'} como &quot;Operacion&quot;
+            </span>
+          )}
         </div>
       </div>
 
+      {/* Barra de asignación masiva de comentarios */}
       {selectedIds.size > 0 && (
         <div className="bg-amber-50 border-2 border-oxxoYellow rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
@@ -321,13 +391,14 @@ export default function ReportTable({
         </div>
       )}
 
+      {/* Grid: Tabla + Panel lateral de Gráficas */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         <div
           className={`${
             showSummary ? 'lg:col-span-8' : 'lg:col-span-12'
           } bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden`}
         >
-          <div className="overflow-x-auto max-h-[68vh]">
+          <div className="overflow-x-auto max-h-[70vh]">
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-oxxoDark text-white sticky top-0 z-10 select-none">
                 <tr>
@@ -465,17 +536,24 @@ export default function ReportTable({
                       colSpan={includeUda ? 8 : 7}
                       className="py-10 text-center text-slate-400 text-sm"
                     >
-                      No hay registros que coincidan con los filtros seleccionados.
+                      No hay registros para el turno o filtros seleccionados.
                     </td>
                   </tr>
                 ) : (
                   processedRows.map((row) => {
                     const isSelected = selectedIds.has(row.id);
+                    const isOperacion = isOperacionComment(row.comentario);
+                    const rowUsers = Object.entries(row.userBreakdown || {});
+
                     return (
                       <tr
                         key={row.id}
                         className={`transition-colors ${
-                          isSelected ? 'bg-amber-50/80' : 'hover:bg-slate-50'
+                          isSelected
+                            ? 'bg-amber-50/80'
+                            : isOperacion
+                            ? 'bg-red-50/40 hover:bg-red-50/70'
+                            : 'hover:bg-slate-50'
                         }`}
                       >
                         <td className="py-2 px-2.5 text-center">
@@ -489,7 +567,22 @@ export default function ReportTable({
                         <td className="py-2 px-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
                           {row.item}
                         </td>
-                        <td className="py-2 px-3 text-slate-700">{row.producto}</td>
+                        <td className="py-2 px-3 text-slate-700">
+                          <div>{row.producto}</div>
+                          {isOperacion && rowUsers.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {rowUsers.map(([usr, cnt]) => (
+                                <span
+                                  key={usr}
+                                  className="inline-flex items-center gap-1 text-[10px] font-semibold bg-red-100 text-red-800 px-1.5 py-0.5 rounded"
+                                >
+                                  <Users className="w-2.5 h-2.5" />
+                                  {usr} ({cnt})
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                         <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
                           {row.pivote}
                         </td>
@@ -515,7 +608,9 @@ export default function ReportTable({
                             value={row.comentario}
                             onChange={(e) => onUpdateComment(row.id, e.target.value)}
                             className={`w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-oxxoRed ${
-                              row.comentario
+                              isOperacion
+                                ? 'border-oxxoRed bg-red-50 text-oxxoRed font-bold'
+                                : row.comentario
                                 ? 'border-emerald-300 bg-emerald-50/50 text-slate-800 font-medium'
                                 : 'border-slate-200 bg-white text-slate-500'
                             }`}
@@ -552,50 +647,154 @@ export default function ReportTable({
           </div>
         </div>
 
+        {/* Panel lateral: Gráfica de Comentarios + Gráfica de Usuarios ("Operacion") */}
         {showSummary && (
-          <div className="lg:col-span-4 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-oxxoDark text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold">
-              <span className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-oxxoYellow" />
-                Gráfica y Resumen por Comentario
-              </span>
-              <span className="text-[11px] font-normal text-slate-300">
-                {rows.length - sinComentario}/{rows.length} clasificados
-              </span>
+          <div className="lg:col-span-4 space-y-4">
+            {/* Tarjeta 1: Gráfica por Comentario */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="bg-oxxoDark text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold">
+                <span className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-oxxoYellow" />
+                  Gráfica por Comentario
+                </span>
+                <span className="text-[11px] font-normal text-slate-300">
+                  {rows.length - sinComentario}/{rows.length} clasificados
+                </span>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {commentSummary.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-slate-400">
+                    Selecciona comentarios en la tabla (individual o masivamente) para generar la
+                    gráfica automáticamente.
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      {commentSummary.map((item, idx) => {
+                        const pctOfMax = Math.round((item.totalItems / maxChartCount) * 100);
+                        const pctOfTotal =
+                          rows.length > 0 ? ((item.totalItems / rows.length) * 100).toFixed(1) : 0;
+                        const barColor = isOperacionComment(item.comentario)
+                          ? 'bg-oxxoRed'
+                          : BAR_COLORS[(idx + 1) % BAR_COLORS.length];
+
+                        return (
+                          <div key={item.comentario} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold text-slate-700 truncate pr-2">
+                                {item.comentario}
+                              </span>
+                              <span className="font-bold text-slate-900 whitespace-nowrap">
+                                {item.totalItems}{' '}
+                                <span className="text-[11px] font-normal text-slate-500">
+                                  ({pctOfTotal}%)
+                                </span>
+                              </span>
+                            </div>
+                            <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${barColor} rounded-full transition-all duration-300`}
+                                style={{ width: `${Math.max(pctOfMax, 6)}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-200">
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-slate-500">
+                            <th className="py-1.5 px-2 text-left font-semibold">Motivo</th>
+                            <th className="py-1.5 px-2 text-right font-semibold">Ítems</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {commentSummary.map((item) => (
+                            <tr
+                              key={item.comentario}
+                              onClick={() =>
+                                handleColFilterChange(
+                                  'comentario',
+                                  colFilters.comentario === item.comentario ? '' : item.comentario
+                                )
+                              }
+                              title="Clic para filtrar la tabla por este comentario"
+                              className="cursor-pointer hover:bg-slate-50"
+                            >
+                              <td className="py-1.5 px-2 text-slate-700">{item.comentario}</td>
+                              <td className="py-1.5 px-2 text-right font-bold text-oxxoRed">
+                                {item.totalItems}
+                              </td>
+                            </tr>
+                          ))}
+                          {sinComentario > 0 && (
+                            <tr
+                              onClick={() =>
+                                handleColFilterChange(
+                                  'comentario',
+                                  colFilters.comentario === '__SIN_COMENTARIO__'
+                                    ? ''
+                                    : '__SIN_COMENTARIO__'
+                                )
+                              }
+                              className="cursor-pointer hover:bg-slate-50 text-slate-400 italic"
+                            >
+                              <td className="py-1.5 px-2">Sin comentario asignado</td>
+                              <td className="py-1.5 px-2 text-right font-semibold">
+                                {sinComentario}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
-            <div className="p-4 space-y-4">
-              {commentSummary.length === 0 ? (
-                <div className="text-center py-8 text-xs text-slate-400">
-                  Selecciona comentarios en la tabla (individual o masivamente) para generar la
-                  gráfica automáticamente.
+            {/* Tarjeta 2: Gráfica de Usuarios cuando se detecta el comentario "Operacion" */}
+            {operacionUsers.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border-2 border-oxxoRed/80 overflow-hidden">
+                <div className="bg-oxxoRed text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold">
+                  <span className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-oxxoYellow" />
+                    Usuarios con &quot;Operacion&quot;
+                  </span>
+                  <span className="bg-black/25 px-2 py-0.5 rounded text-[11px]">
+                    {operacionLinesCount} {operacionLinesCount === 1 ? 'línea' : 'líneas'}
+                  </span>
                 </div>
-              ) : (
-                <>
-                  <div className="space-y-3">
-                    {commentSummary.map((item, idx) => {
-                      const pctOfMax = Math.round((item.totalItems / maxChartCount) * 100);
-                      const pctOfTotal =
-                        rows.length > 0 ? ((item.totalItems / rows.length) * 100).toFixed(1) : 0;
-                      const barColor = BAR_COLORS[idx % BAR_COLORS.length];
 
+                <div className="p-4 space-y-4">
+                  <p className="text-[11px] text-slate-500">
+                    Acumulado de líneas eliminadas por usuario asignadas a Operacion:
+                  </p>
+
+                  {/* Barras por usuario */}
+                  <div className="space-y-3">
+                    {operacionUsers.map((u) => {
+                      const pctOfMax = Math.round((u.lineas / maxUserLinesCount) * 100);
                       return (
-                        <div key={item.comentario} className="space-y-1">
+                        <div key={u.usuario} className="space-y-1">
                           <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-slate-700 truncate pr-2">
-                              {item.comentario}
+                            <span className="font-bold text-slate-800 truncate pr-2">
+                              {u.usuario}
                             </span>
-                            <span className="font-bold text-slate-900 whitespace-nowrap">
-                              {item.totalItems}{' '}
+                            <span className="font-bold text-oxxoRed whitespace-nowrap">
+                              {u.lineas} {u.lineas === 1 ? 'línea' : 'líneas'}{' '}
                               <span className="text-[11px] font-normal text-slate-500">
-                                ({pctOfTotal}%)
+                                ({u.eventos} reg.)
                               </span>
                             </span>
                           </div>
-                          <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="w-full h-3 bg-red-100 rounded-full overflow-hidden">
                             <div
-                              className={`h-full ${barColor} rounded-full transition-all duration-300`}
-                              style={{ width: `${Math.max(pctOfMax, 6)}%` }}
+                              className="h-full bg-oxxoRed rounded-full transition-all duration-300"
+                              style={{ width: `${Math.max(pctOfMax, 8)}%` }}
                             />
                           </div>
                         </div>
@@ -603,57 +802,39 @@ export default function ReportTable({
                     })}
                   </div>
 
+                  {/* Tabla resumen por usuario */}
                   <div className="pt-3 border-t border-slate-200">
                     <table className="w-full text-xs border-collapse">
                       <thead>
                         <tr className="border-b border-slate-200 text-slate-500">
-                          <th className="py-1.5 px-2 text-left font-semibold">Motivo</th>
-                          <th className="py-1.5 px-2 text-right font-semibold">Ítems</th>
+                          <th className="py-1.5 px-2 text-left font-semibold">Usuario</th>
+                          <th className="py-1.5 px-2 text-right font-semibold">Líneas</th>
+                          <th className="py-1.5 px-2 text-right font-semibold">Total Reg.</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {commentSummary.map((item) => (
+                        {operacionUsers.map((u) => (
                           <tr
-                            key={item.comentario}
-                            onClick={() =>
-                              handleColFilterChange(
-                                'comentario',
-                                colFilters.comentario === item.comentario ? '' : item.comentario
-                              )
-                            }
-                            title="Clic para filtrar la tabla por este comentario"
-                            className="cursor-pointer hover:bg-slate-50"
+                            key={u.usuario}
+                            onClick={() => setSearch(search === u.usuario ? '' : u.usuario)}
+                            title="Clic para filtrar la tabla por este usuario"
+                            className="cursor-pointer hover:bg-red-50/60"
                           >
-                            <td className="py-1.5 px-2 text-slate-700">{item.comentario}</td>
-                            <td className="py-1.5 px-2 text-right font-bold text-oxxoRed">
-                              {item.totalItems}
+                            <td className="py-1.5 px-2 font-semibold text-slate-700">
+                              {u.usuario}
                             </td>
+                            <td className="py-1.5 px-2 text-right font-bold text-oxxoRed">
+                              {u.lineas}
+                            </td>
+                            <td className="py-1.5 px-2 text-right text-slate-600">{u.eventos}</td>
                           </tr>
                         ))}
-                        {sinComentario > 0 && (
-                          <tr
-                            onClick={() =>
-                              handleColFilterChange(
-                                'comentario',
-                                colFilters.comentario === '__SIN_COMENTARIO__'
-                                  ? ''
-                                  : '__SIN_COMENTARIO__'
-                              )
-                            }
-                            className="cursor-pointer hover:bg-slate-50 text-slate-400 italic"
-                          >
-                            <td className="py-1.5 px-2">Sin comentario asignado</td>
-                            <td className="py-1.5 px-2 text-right font-semibold">
-                              {sinComentario}
-                            </td>
-                          </tr>
-                        )}
                       </tbody>
                     </table>
                   </div>
-                </>
-              )}
-            </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

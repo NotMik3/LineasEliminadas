@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { summarizeComments } from './lneProcessor';
+import { summarizeComments, summarizeOperacionUsers } from './lneProcessor';
 
 function buildSheet(title, shiftLabel, rows, includeUda = false) {
   const aoa = [
@@ -47,6 +47,19 @@ function buildSheet(title, shiftLabel, rows, includeUda = false) {
         ...summary.map((s) => [s.comentario, s.totalItems]),
       ],
       { origin: 'K5' }
+    );
+  }
+
+  const { users: operacionUsers } = summarizeOperacionUsers(rows);
+  if (operacionUsers.length > 0) {
+    const startRow = summary.length > 0 ? 5 + summary.length + 3 : 5;
+    XLSX.utils.sheet_add_aoa(
+      ws,
+      [
+        ['Usuario ("Operacion")', 'Líneas'],
+        ...operacionUsers.map((u) => [u.usuario, u.lineas]),
+      ],
+      { origin: `K${startRow}` }
     );
   }
 
