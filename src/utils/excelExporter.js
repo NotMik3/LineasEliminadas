@@ -1,11 +1,11 @@
 import * as XLSX from 'xlsx';
 import { summarizeComments } from './lneProcessor';
 
-function buildSheet(title, rows, includeUda = false) {
+function buildSheet(title, shiftLabel, rows, includeUda = false) {
   const aoa = [
     [title],
     [],
-    ['CONTROL Y SEGUIMIENTO'],
+    [`CONTROL Y SEGUIMIENTO | ${shiftLabel || 'CEDIS SALTILLO'}`],
     [],
   ];
 
@@ -38,7 +38,7 @@ function buildSheet(title, rows, includeUda = false) {
     { s: { r: 2, c: 0 }, e: { r: 2, c: 8 } },
   ];
 
-  const summary = summarizeComments(rows);
+  const { list: summary } = summarizeComments(rows);
   if (summary.length > 0) {
     XLSX.utils.sheet_add_aoa(
       ws,
@@ -83,21 +83,24 @@ function buildSheet(title, rows, includeUda = false) {
   return ws;
 }
 
-export function exportLneWorkbook(reports) {
+export function exportLneWorkbook(reports, shiftLabel = '') {
   const wb = XLSX.utils.book_new();
 
   const wsPiezas = buildSheet(
-    'REPORTE DE PRÓXIMOS A CERO (PIEZAS) | OXXO CEDIS SALTILLO',
+    'LINEAS ELIMINADAS (PIEZAS) | CEDIS SALTILLO',
+    shiftLabel,
     reports.piezas,
     false
   );
   const wsRefri = buildSheet(
-    'REPORTE DE PRÓXIMOS A CERO (REFRI) | OXXO CEDIS SALTILLO',
+    'LINEAS ELIMINADAS (REFRI) | CEDIS SALTILLO',
+    shiftLabel,
     reports.refri,
     true
   );
   const wsCajas = buildSheet(
-    'REPORTE DE PRÓXIMOS A CERO (CAJAS) | OXXO CEDIS SALTILLO',
+    'LINEAS ELIMINADAS (CAJAS) | CEDIS SALTILLO',
+    shiftLabel,
     reports.cajas,
     false
   );
@@ -107,5 +110,5 @@ export function exportLneWorkbook(reports) {
   XLSX.utils.book_append_sheet(wb, wsCajas, 'LNE CAJAS');
 
   const today = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `Reporte_LNE_${today}.xlsx`);
+  XLSX.writeFile(wb, `Lineas_Eliminadas_SAL100_${today}.xlsx`);
 }

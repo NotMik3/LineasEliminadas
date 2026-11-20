@@ -4,9 +4,9 @@ export default {
   theme: {
     extend: {
       colors: {
-        oxxoRed: '#B51F2A',
+        oxxoRed: '#E30613',
         oxxoDark: '#373737',
-        oxxoYellow: '#F5A623',
+        oxxoYellow: '#FBB017',
       },
     },
   },

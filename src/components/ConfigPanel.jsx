@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { Settings, Save, RotateCcw, CheckCircle2, MessageSquarePlus } from 'lucide-react';
+import { DEFAULT_COMMENTS_CATALOG } from '../utils/lneProcessor';
 
 export default function ConfigPanel({ config, onSaveConfig, onResetDefaults }) {
   const [piezasText, setPiezasText] = useState('');
   const [refriText, setRefriText] = useState('');
   const [cajasText, setCajasText] = useState('');
   const [uda5Text, setUda5Text] = useState('');
+  const [commentsText, setCommentsText] = useState('');
   const [savedNotice, setSavedNotice] = useState(false);
 
   useEffect(() => {
@@ -13,6 +15,7 @@ export default function ConfigPanel({ config, onSaveConfig, onResetDefaults }) {
     setRefriText((config.refri || []).join('\n'));
     setCajasText((config.cajas || []).join('\n'));
     setUda5Text((config.uda5 || []).join('\n'));
+    setCommentsText((config.commentsCatalog || DEFAULT_COMMENTS_CATALOG).join('\n'));
   }, [config]);
 
   const parseLines = (text) =>
@@ -27,11 +30,13 @@ export default function ConfigPanel({ config, onSaveConfig, onResetDefaults }) {
 
   const handleSave = (e) => {
     e.preventDefault();
+    const parsedComments = parseLines(commentsText);
     onSaveConfig({
       piezas: parseLines(piezasText),
       refri: parseLines(refriText),
       cajas: parseLines(cajasText),
       uda5: parseLines(uda5Text),
+      commentsCatalog: parsedComments.length > 0 ? parsedComments : DEFAULT_COMMENTS_CATALOG,
     });
     setSavedNotice(true);
     setTimeout(() => setSavedNotice(false), 2500);
@@ -46,11 +51,10 @@ export default function ConfigPanel({ config, onSaveConfig, onResetDefaults }) {
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-800">
-              Parámetros de Pasillos y UDA5 (Hoja Config)
+              Parámetros de Pasillos, UDA5 y Catálogo de Comentarios
             </h2>
             <p className="text-xs text-slate-500">
-              Escribe un prefijo o código por línea. Se guarda automáticamente en tu navegador y se
-              actualiza si subes un Excel con hoja <span className="font-semibold">Config</span>.
+              Un valor por línea. Se guarda automáticamente en tu navegador.
             </p>
           </div>
         </div>
@@ -68,11 +72,11 @@ export default function ConfigPanel({ config, onSaveConfig, onResetDefaults }) {
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg transition"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            Limpiar listas
+            Restaurar valores
           </button>
           <button
             type="submit"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-oxxoRed hover:bg-red-800 px-4 py-2 rounded-lg transition shadow-sm"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-oxxoRed hover:bg-red-700 px-4 py-2 rounded-lg transition shadow-sm"
           >
             <Save className="w-3.5 h-3.5" />
             Guardar parámetros
@@ -80,7 +84,7 @@ export default function ConfigPanel({ config, onSaveConfig, onResetDefaults }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
             Pasillos Piezas (Col A)
@@ -135,6 +139,23 @@ export default function ConfigPanel({ config, onSaveConfig, onResetDefaults }) {
             className="w-full rounded-lg border border-slate-300 p-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-oxxoRed"
           />
           <p className="text-[11px] text-slate-400 mt-1">{parseLines(uda5Text).length} ítems UDA5</p>
+        </div>
+
+        <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200/80">
+          <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-900 mb-1.5">
+            <MessageSquarePlus className="w-3.5 h-3.5 text-oxxoRed" />
+            Comentarios Homologados
+          </label>
+          <textarea
+            rows={10}
+            value={commentsText}
+            onChange={(e) => setCommentsText(e.target.value)}
+            placeholder="Escribe opciones estándar..."
+            className="w-full rounded-lg border border-amber-300 bg-white p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-oxxoRed"
+          />
+          <p className="text-[11px] text-amber-800 mt-1">
+            {parseLines(commentsText).length} opciones para selector y gráfica
+          </p>
         </div>
       </div>
     </form>

@@ -1,9 +1,11 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, FileSpreadsheet, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, AlertCircle, Clock } from 'lucide-react';
+import { getShiftFromDate } from '../utils/shiftUtils';
 
-export default function FileUploader({ onFileLoaded, error }) {
+export default function FileUploader({ onFileLoaded, error, historyCount, onOpenHistory }) {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
+  const currentShift = getShiftFromDate(new Date());
 
   const handleFiles = (files) => {
     if (!files || files.length === 0) return;
@@ -12,6 +14,23 @@ export default function FileUploader({ onFileLoaded, error }) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
+        <div className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
+          <Clock className="w-3.5 h-3.5 text-oxxoRed" />
+          Turno actual detectado: <span className="text-slate-900 font-bold">{currentShift.label}</span>
+        </div>
+
+        {historyCount > 0 && (
+          <button
+            type="button"
+            onClick={onOpenHistory}
+            className="text-xs font-bold text-oxxoRed hover:underline"
+          >
+            Ver histórico guardado ({historyCount} {historyCount === 1 ? 'archivo' : 'archivos'}) →
+          </button>
+        )}
+      </div>
+
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -50,7 +69,7 @@ export default function FileUploader({ onFileLoaded, error }) {
         </p>
         <button
           type="button"
-          className="mt-5 inline-flex items-center gap-2 bg-oxxoRed hover:bg-red-800 text-white font-semibold text-sm px-5 py-2.5 rounded-lg transition shadow-sm"
+          className="mt-5 inline-flex items-center gap-2 bg-oxxoRed hover:bg-red-700 text-white font-semibold text-sm px-5 py-2.5 rounded-lg transition shadow-sm"
         >
           <FileSpreadsheet className="w-4 h-4" />
           Seleccionar archivo Excel
