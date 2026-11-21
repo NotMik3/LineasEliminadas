@@ -1,7 +1,7 @@
 {
-  "name": "lineas-eliminadas-cedis-saltillo",
+  "name": "lineas-eliminadas-multi-cedis",
   "private": true,
-  "version": "4.0.0",
+  "version": "5.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

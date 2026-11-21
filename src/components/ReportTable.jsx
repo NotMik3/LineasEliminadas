@@ -31,6 +31,7 @@ const BAR_COLORS = [
 
 export default function ReportTable({
   title,
+  cedisName = 'CEDIS SALTILLO',
   rows,
   includeUda = false,
   commentsCatalog = DEFAULT_COMMENTS_CATALOG,
@@ -168,7 +169,6 @@ export default function ReportTable({
     [rows]
   );
 
-  // Gráfica especial cuando se detecta "Operacion"
   const { users: operacionUsers, matchingLinesCount: operacionLinesCount } = useMemo(
     () => summarizeOperacionUsers(rows),
     [rows]
@@ -239,7 +239,7 @@ export default function ReportTable({
         <div className="bg-oxxoRed text-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base md:text-lg font-bold tracking-wide">{title}</h2>
-            <p className="text-xs text-red-100">CONTROL Y SEGUIMIENTO • CEDIS SALTILLO</p>
+            <p className="text-xs text-red-100">CONTROL Y SEGUIMIENTO • {cedisName}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -391,7 +391,6 @@ export default function ReportTable({
         </div>
       )}
 
-      {/* Grid: Tabla + Panel lateral de Gráficas */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         <div
           className={`${
@@ -536,7 +535,7 @@ export default function ReportTable({
                       colSpan={includeUda ? 8 : 7}
                       className="py-10 text-center text-slate-400 text-sm"
                     >
-                      No hay registros para el turno o filtros seleccionados.
+                      No hay registros para el CEDIS, turno o filtros seleccionados.
                     </td>
                   </tr>
                 ) : (
@@ -650,7 +649,6 @@ export default function ReportTable({
         {/* Panel lateral: Gráfica de Comentarios + Gráfica de Usuarios ("Operacion") */}
         {showSummary && (
           <div className="lg:col-span-4 space-y-4">
-            {/* Tarjeta 1: Gráfica por Comentario */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="bg-oxxoDark text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold">
                 <span className="flex items-center gap-2">
@@ -756,7 +754,6 @@ export default function ReportTable({
               </div>
             </div>
 
-            {/* Tarjeta 2: Gráfica de Usuarios cuando se detecta el comentario "Operacion" */}
             {operacionUsers.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm border-2 border-oxxoRed/80 overflow-hidden">
                 <div className="bg-oxxoRed text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold">
@@ -774,7 +771,6 @@ export default function ReportTable({
                     Acumulado de líneas eliminadas por usuario asignadas a Operacion:
                   </p>
 
-                  {/* Barras por usuario */}
                   <div className="space-y-3">
                     {operacionUsers.map((u) => {
                       const pctOfMax = Math.round((u.lineas / maxUserLinesCount) * 100);
@@ -802,7 +798,6 @@ export default function ReportTable({
                     })}
                   </div>
 
-                  {/* Tabla resumen por usuario */}
                   <div className="pt-3 border-t border-slate-200">
                     <table className="w-full text-xs border-collapse">
                       <thead>

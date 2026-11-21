@@ -9,14 +9,17 @@ import {
   FileSpreadsheet,
   History,
   Clock,
-  Upload,
+  Home,
+  RotateCcw,
+  Building2,
 } from 'lucide-react';
 import FileUploader from './components/FileUploader';
 import ConfigPanel from './components/ConfigPanel';
 import ReportTable from './components/ReportTable';
 import HistoryPanel from './components/HistoryPanel';
 import {
-  DEFAULT_CONFIG,
+  DEFAULT_MULTI_CEDIS_STATE,
+  createEmptyCedisConfig,
   DEFAULT_COMMENTS_CATALOG,
   extractConfigFromWorkbook,
   parseBaseRecords,
@@ -25,26 +28,22 @@ import {
 import { exportLneWorkbook } from './utils/excelExporter';
 import { detectDominantShift, SHIFT_OPTIONS } from './utils/shiftUtils';
 
-const CONFIG_STORAGE_KEY = 'lne_cedis_saltillo_config_v4';
-const HISTORY_STORAGE_KEY = 'lne_cedis_saltillo_history_v4';
+const MULTI_CEDIS_STORAGE_KEY = 'lne_multi_cedis_state_v5';
+const HISTORY_STORAGE_KEY = 'lne_multi_cedis_history_v5';
 const MAX_HISTORY_ITEMS = 25;
 
 export default function App() {
-  const [config, setConfig] = useState(() => {
+  const [cedisState, setCedisState] = useState(() => {
     try {
-      const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
-      if (!saved) return DEFAULT_CONFIG;
+      const saved = localStorage.getItem(MULTI_CEDIS_STORAGE_KEY);
+      if (!saved) return DEFAULT_MULTI_CEDIS_STATE;
       const parsed = JSON.parse(saved);
-      return {
-        ...DEFAULT_CONFIG,
-        ...parsed,
-        commentsCatalog:
-          parsed.commentsCatalog && parsed.commentsCatalog.length > 0
-            ? parsed.commentsCatalog
-            : DEFAULT_COMMENTS_CATALOG,
-      };
+      if (!parsed?.cedisList || parsed.cedisList.length === 0) {
+        return DEFAULT_MULTI_CEDIS_STATE;
+      }
+      return parsed;
     } catch {
-      return DEFAULT_CONFIG;
+      return DEFAULT_MULTI_CEDIS_STATE;
     }
   });
 
@@ -63,16 +62,19 @@ export default function App() {
   const [selectedShiftId, setSelectedShiftId] = useState('ALL');
   const [commentsStore, setCommentsStore] = useState({});
   const [reports, setReports] = useState(null);
-  const [activeTab, setActiveTab] = useState('piezas');
+  // viewMode: 'home' | 'report' | 'config' | 'history'
+  const [viewMode, setViewMode] = useState('home');
+  // reportTab: 'piezas' | 'refri' | 'cajas'
+  const [reportTab, setReportTab] = useState('piezas');
   const [error, setError] = useState('');
 
   useEffect(() => {
     try {
-      localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+      localStorage.setItem(MULTI_CEDIS_STORAGE_KEY, JSON.stringify(cedisState));
     } catch {
       // Ignorar si localStorage está restringido
     }
-  }, [config]);
+  }, [cedisState]);
 
   useEffect(() => {
     try {
@@ -81,6 +83,15 @@ export default function App() {
       // Ignorar si excede cuota
     }
   }, [history]);
+
+  const activeCedis = useMemo(() => {
+    return (
+      cedisState.cedisList.find((c) => c.id === cedisState.activeCedisId) ||
+      cedisState.cedisList[0]
+    );
+  }, [cedisState]);
+
+  const activeConfig = activeCedis?.config || createEmptyCedisConfig();
 
   const activeShiftObj = useMemo(
     () => SHIFT_OPTIONS.find((s) => s.id === selectedShiftId) || SHIFT_OPTIONS[0],
@@ -136,6 +147,86 @@ export default function App() {
     );
   };
 
+  // Cambiar de CEDIS activo y recalcular si hay datos cargados
+  const handleSelectCedis = (newCedisId) => {
+    const targetCedis = cedisState.cedisList.find((c) => c.id === newCedisId);
+    if (!targetCedis) return;
+
+    setCedisState((prev) => ({ ...prev, activeCedisId: newCedisId }));
+
+    if (baseRecords) {
+      const fresh = runLneAnalysis(baseRecords, targetCedis.config, selectedShiftId);
+      const withComments = attachStoredComments(fresh, commentsStore, selectedShiftId);
+      setReports(withComments);
+    }
+  };
+
+  const handleAddCedis = (name, code) => {
+    const newId = `cedis_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newCedis = {
+      id: newId,
+      name,
+      code,
+      config: createEmptyCedisConfig(),
+    };
+    setCedisState((prev) => ({
+      activeCedisId: newId,
+      cedisList: [...prev.cedisList, newCedis],
+    }));
+
+    if (baseRecords) {
+      const fresh = runLneAnalysis(baseRecords, newCedis.config, selectedShiftId);
+      setReports(fresh);
+    }
+  };
+
+  const handleUpdateCedisMeta = (cedisId, { name, code }) => {
+    setCedisState((prev) => ({
+      ...prev,
+      cedisList: prev.cedisList.map((c) =>
+        c.id === cedisId ? { ...c, name: name || c.name, code } : c
+      ),
+    }));
+  };
+
+  const handleDeleteCedis = (cedisId) => {
+    if (cedisState.cedisList.length <= 1) return;
+    const target = cedisState.cedisList.find((c) => c.id === cedisId);
+    if (
+      !window.confirm(
+        `¿Seguro que deseas eliminar "${target?.name}" y su configuración de pasillos?`
+      )
+    ) {
+      return;
+    }
+
+    setCedisState((prev) => {
+      const remaining = prev.cedisList.filter((c) => c.id !== cedisId);
+      const nextActiveId =
+        prev.activeCedisId === cedisId ? remaining[0].id : prev.activeCedisId;
+      return {
+        activeCedisId: nextActiveId,
+        cedisList: remaining,
+      };
+    });
+  };
+
+  const handleSaveCedisConfig = (cedisId, newConfig) => {
+    setCedisState((prev) => ({
+      ...prev,
+      cedisList: prev.cedisList.map((c) =>
+        c.id === cedisId ? { ...c, config: newConfig } : c
+      ),
+    }));
+
+    if (baseRecords && cedisId === activeCedis?.id) {
+      const fresh = runLneAnalysis(baseRecords, newConfig, selectedShiftId);
+      const withComments = attachStoredComments(fresh, commentsStore, selectedShiftId);
+      setReports(withComments);
+      syncHistoryEntry(activeHistoryId, withComments, commentsStore, selectedShiftId);
+    }
+  };
+
   const handleFileLoaded = (file) => {
     setError('');
     const reader = new FileReader();
@@ -146,27 +237,39 @@ export default function App() {
         const workbook = XLSX.read(data, { type: 'array' });
 
         const extractedConfig = extractConfigFromWorkbook(workbook);
-        const activeConfig = extractedConfig
-          ? {
-              ...config,
-              ...extractedConfig,
-            }
-          : config;
+        let configToUse = activeConfig;
 
         if (extractedConfig) {
-          setConfig(activeConfig);
+          configToUse = {
+            ...activeConfig,
+            ...extractedConfig,
+            commentsCatalog:
+              activeConfig.commentsCatalog && activeConfig.commentsCatalog.length > 0
+                ? activeConfig.commentsCatalog
+                : DEFAULT_COMMENTS_CATALOG,
+          };
+
+          setCedisState((prev) => ({
+            ...prev,
+            cedisList: prev.cedisList.map((c) =>
+              c.id === activeCedis.id ? { ...c, config: configToUse } : c
+            ),
+          }));
         }
 
         const { records } = parseBaseRecords(workbook);
         const dominantShift = detectDominantShift(records);
         const initialShiftId = dominantShift.id;
 
-        const generated = runLneAnalysis(records, activeConfig, initialShiftId);
+        const generated = runLneAnalysis(records, configToUse, initialShiftId);
         const emptyStore = {};
 
         const newEntryId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         const newHistoryEntry = {
           id: newEntryId,
+          cedisId: activeCedis.id,
+          cedisName: activeCedis.name,
+          cedisCode: activeCedis.code,
           fileName: file.name,
           uploadedAt: new Date().toISOString(),
           shift: dominantShift,
@@ -185,11 +288,16 @@ export default function App() {
         setHistory((prev) => [newHistoryEntry, ...prev].slice(0, MAX_HISTORY_ITEMS));
 
         const hasAnyAisle =
-          activeConfig.piezas.length > 0 ||
-          activeConfig.refri.length > 0 ||
-          activeConfig.cajas.length > 0;
+          configToUse.piezas.length > 0 ||
+          configToUse.refri.length > 0 ||
+          configToUse.cajas.length > 0;
 
-        setActiveTab(hasAnyAisle ? 'piezas' : 'config');
+        if (hasAnyAisle) {
+          setReportTab('piezas');
+          setViewMode('report');
+        } else {
+          setViewMode('config');
+        }
       } catch (err) {
         setError(err.message || 'No se pudo leer el archivo Excel.');
       }
@@ -202,20 +310,10 @@ export default function App() {
     setSelectedShiftId(newShiftId);
     if (!baseRecords) return;
 
-    const recalculated = runLneAnalysis(baseRecords, config, newShiftId);
+    const recalculated = runLneAnalysis(baseRecords, activeConfig, newShiftId);
     const withComments = attachStoredComments(recalculated, commentsStore, newShiftId);
     setReports(withComments);
     syncHistoryEntry(activeHistoryId, withComments, commentsStore, newShiftId);
-  };
-
-  const handleSaveConfig = (newConfig) => {
-    setConfig(newConfig);
-    if (baseRecords) {
-      const fresh = runLneAnalysis(baseRecords, newConfig, selectedShiftId);
-      const withComments = attachStoredComments(fresh, commentsStore, selectedShiftId);
-      setReports(withComments);
-      syncHistoryEntry(activeHistoryId, withComments, commentsStore, selectedShiftId);
-    }
   };
 
   const handleUpdateComment = (area, rowId, value) => {
@@ -266,13 +364,24 @@ export default function App() {
     const restoredStore = entry.commentsStore || {};
     const restoredShiftId = entry.selectedShiftId || entry.shift?.id || 'ALL';
 
+    const matchedCedis =
+      cedisState.cedisList.find((c) => c.id === entry.cedisId) || activeCedis;
+
+    if (matchedCedis && matchedCedis.id !== cedisState.activeCedisId) {
+      setCedisState((prev) => ({ ...prev, activeCedisId: matchedCedis.id }));
+    }
+
     setBaseRecords(restoredRecords);
     setFileName(entry.fileName);
     setCommentsStore(restoredStore);
     setSelectedShiftId(restoredShiftId);
 
     if (restoredRecords) {
-      const fresh = runLneAnalysis(restoredRecords, config, restoredShiftId);
+      const fresh = runLneAnalysis(
+        restoredRecords,
+        matchedCedis?.config || activeConfig,
+        restoredShiftId
+      );
       setReports(attachStoredComments(fresh, restoredStore, restoredShiftId));
     } else {
       setReports(entry.reports);
@@ -280,7 +389,8 @@ export default function App() {
 
     setActiveHistoryId(entry.id);
     setError('');
-    setActiveTab('piezas');
+    setReportTab('piezas');
+    setViewMode('report');
   };
 
   const handleDeleteHistoryEntry = (id) => {
@@ -296,7 +406,8 @@ export default function App() {
     setActiveHistoryId(null);
   };
 
-  const handleResetAll = () => {
+  // Reiniciar información cargada y volver al inicio SIN borrar la configuración de ningún CEDIS
+  const handleResetAndGoHome = () => {
     setBaseRecords(null);
     setReports(null);
     setFileName('');
@@ -304,24 +415,68 @@ export default function App() {
     setActiveHistoryId(null);
     setSelectedShiftId('ALL');
     setError('');
-    setActiveTab('piezas');
+    setReportTab('piezas');
+    setViewMode('home');
   };
+
+  // Volver al inicio o al reporte activo sin perder datos
+  const handleBackFromSubpage = () => {
+    if (reports) {
+      setViewMode('report');
+    } else {
+      setViewMode('home');
+    }
+  };
+
+  const totalActiveAisles =
+    (activeConfig.piezas?.length || 0) +
+    (activeConfig.refri?.length || 0) +
+    (activeConfig.cajas?.length || 0);
 
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Navbar principal */}
       <header className="bg-oxxoRed text-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <img
-              src="/logo-oxxo.png"
-              alt="Logo OXXO"
-              className="h-10 w-auto rounded shadow-sm bg-white p-0.5"
-            />
+            <button
+              type="button"
+              onClick={() => setViewMode(reports ? 'report' : 'home')}
+              className="shrink-0 focus:outline-none"
+              title="Ir al inicio"
+            >
+              <img
+                src="/logo-oxxo.png"
+                alt="Logo OXXO"
+                className="h-10 w-auto rounded shadow-sm bg-white p-0.5"
+              />
+            </button>
+
             <div>
-              <h1 className="text-base md:text-lg font-extrabold tracking-tight leading-tight">
-                Lineas eliminadas | CEDIS SALTILLO
-              </h1>
-              <div className="flex flex-wrap items-center gap-2 mt-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-base md:text-lg font-extrabold tracking-tight leading-tight">
+                  Lineas eliminadas | {activeCedis?.name || 'CEDIS'}
+                </h1>
+
+                {/* Selector rápido de CEDIS en el encabezado */}
+                <span className="inline-flex items-center gap-1 bg-white/15 border border-white/30 px-2 py-0.5 rounded text-[11px] font-bold">
+                  <Building2 className="w-3 h-3 text-oxxoYellow" />
+                  <select
+                    value={activeCedis?.id || ''}
+                    onChange={(e) => handleSelectCedis(e.target.value)}
+                    aria-label="Cambiar CEDIS"
+                    className="bg-transparent text-white font-bold focus:outline-none cursor-pointer"
+                  >
+                    {cedisState.cedisList.map((c) => (
+                      <option key={c.id} value={c.id} className="text-slate-900">
+                        {c.name} {c.code ? `(${c.code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 mt-1">
                 <span className="inline-flex items-center gap-1 text-[11px] bg-black/25 text-white px-2 py-0.5 rounded font-semibold">
                   <Clock className="w-3 h-3 text-oxxoYellow" />
                   <select
@@ -348,13 +503,28 @@ export default function App() {
             </div>
           </div>
 
+          {/* Botones de navegación y acciones */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Botón siempre disponible para volver al Inicio */}
             <button
               type="button"
-              onClick={() => setActiveTab('history')}
+              onClick={() => setViewMode(reports ? 'report' : 'home')}
               className={`inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-lg transition ${
-                activeTab === 'history'
-                  ? 'bg-oxxoYellow text-slate-900'
+                viewMode === 'home' || viewMode === 'report'
+                  ? 'bg-oxxoYellow text-slate-900 shadow-sm'
+                  : 'bg-white/15 hover:bg-white/25 text-white'
+              }`}
+            >
+              <Home className="w-4 h-4" />
+              Inicio
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode('history')}
+              className={`inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-lg transition ${
+                viewMode === 'history'
+                  ? 'bg-oxxoYellow text-slate-900 shadow-sm'
                   : 'bg-white/15 hover:bg-white/25 text-white'
               }`}
             >
@@ -364,50 +534,59 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => setActiveTab('config')}
+              onClick={() => setViewMode('config')}
               className={`inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-lg transition ${
-                activeTab === 'config'
-                  ? 'bg-oxxoYellow text-slate-900'
+                viewMode === 'config'
+                  ? 'bg-oxxoYellow text-slate-900 shadow-sm'
                   : 'bg-white/15 hover:bg-white/25 text-white'
               }`}
             >
               <Settings className="w-4 h-4" />
-              Config ({config.piezas.length + config.refri.length + config.cajas.length})
+              Config ({totalActiveAisles})
             </button>
 
             {reports && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => exportLneWorkbook(reports, activeShiftObj.label)}
-                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition shadow-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Exportar Excel
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleResetAll}
-                  className="inline-flex items-center gap-1.5 bg-white text-oxxoRed hover:bg-red-50 text-xs font-bold px-3.5 py-2 rounded-lg transition shadow-sm"
-                >
-                  <Upload className="w-4 h-4" />
-                  Nuevo archivo
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() =>
+                  exportLneWorkbook(
+                    reports,
+                    activeCedis?.name,
+                    activeCedis?.code,
+                    activeShiftObj.label
+                  )
+                }
+                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                Exportar Excel
+              </button>
             )}
+
+            {/* Botón Reiniciar información y volver al inicio conservando configuración */}
+            <button
+              type="button"
+              onClick={handleResetAndGoHome}
+              title="Limpia los datos cargados y vuelve a la pantalla inicial manteniendo la configuración de tus CEDIS"
+              className="inline-flex items-center gap-1.5 bg-white text-oxxoRed hover:bg-red-50 text-xs font-bold px-3.5 py-2 rounded-lg transition shadow-sm"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reiniciar e Inicio
+            </button>
           </div>
         </div>
       </header>
 
+      {/* Contenido principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6 space-y-6">
-        {reports && (
+        {/* Pestañas de áreas cuando se está viendo el reporte */}
+        {reports && viewMode === 'report' && (
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
             <button
               type="button"
-              onClick={() => setActiveTab('piezas')}
+              onClick={() => setReportTab('piezas')}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
-                activeTab === 'piezas'
+                reportTab === 'piezas'
                   ? 'bg-oxxoRed text-white shadow-sm'
                   : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
               }`}
@@ -418,9 +597,9 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => setActiveTab('refri')}
+              onClick={() => setReportTab('refri')}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
-                activeTab === 'refri'
+                reportTab === 'refri'
                   ? 'bg-oxxoRed text-white shadow-sm'
                   : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
               }`}
@@ -431,9 +610,9 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => setActiveTab('cajas')}
+              onClick={() => setReportTab('cajas')}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
-                activeTab === 'cajas'
+                reportTab === 'cajas'
                   ? 'bg-oxxoRed text-white shadow-sm'
                   : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
               }`}
@@ -444,39 +623,59 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'history' && (
+        {/* Vista Histórico */}
+        {viewMode === 'history' && (
           <HistoryPanel
             history={history}
             activeHistoryId={activeHistoryId}
             onLoadEntry={handleLoadHistoryEntry}
             onDeleteEntry={handleDeleteHistoryEntry}
             onClearHistory={handleClearHistory}
+            onBackToMain={handleBackFromSubpage}
+            hasLoadedReport={Boolean(reports)}
           />
         )}
 
-        {activeTab === 'config' && (
+        {/* Vista Configuración Multi-CEDIS */}
+        {viewMode === 'config' && (
           <ConfigPanel
-            config={config}
-            onSaveConfig={handleSaveConfig}
-            onResetDefaults={() => handleSaveConfig(DEFAULT_CONFIG)}
+            cedisList={cedisState.cedisList}
+            activeCedis={activeCedis}
+            onSelectCedis={handleSelectCedis}
+            onAddCedis={handleAddCedis}
+            onUpdateCedisMeta={handleUpdateCedisMeta}
+            onDeleteCedis={handleDeleteCedis}
+            onSaveConfig={handleSaveCedisConfig}
+            onResetDefaults={(cedisId) =>
+              handleSaveCedisConfig(cedisId, createEmptyCedisConfig())
+            }
+            onBackToMain={handleBackFromSubpage}
+            hasLoadedReport={Boolean(reports)}
           />
         )}
 
-        {!reports && activeTab !== 'config' && activeTab !== 'history' && (
+        {/* Vista Inicio / Carga de Excel */}
+        {viewMode === 'home' && (
           <FileUploader
+            activeCedis={activeCedis}
+            cedisList={cedisState.cedisList}
+            onSelectCedis={handleSelectCedis}
+            onOpenConfig={() => setViewMode('config')}
             onFileLoaded={handleFileLoaded}
             error={error}
             historyCount={history.length}
-            onOpenHistory={() => setActiveTab('history')}
+            onOpenHistory={() => setViewMode('history')}
           />
         )}
 
-        {reports && activeTab === 'piezas' && (
+        {/* Vistas de Reporte */}
+        {reports && viewMode === 'report' && reportTab === 'piezas' && (
           <ReportTable
             title={`LINEAS ELIMINADAS (PIEZAS) • ${activeShiftObj.shortLabel.toUpperCase()}`}
+            cedisName={activeCedis?.name}
             rows={reports.piezas}
             includeUda={false}
-            commentsCatalog={config.commentsCatalog}
+            commentsCatalog={activeConfig.commentsCatalog}
             selectedShiftId={selectedShiftId}
             onSelectShift={handleShiftChange}
             shiftCounts={shiftCounts}
@@ -485,12 +684,13 @@ export default function App() {
           />
         )}
 
-        {reports && activeTab === 'refri' && (
+        {reports && viewMode === 'report' && reportTab === 'refri' && (
           <ReportTable
             title={`LINEAS ELIMINADAS (REFRI) • ${activeShiftObj.shortLabel.toUpperCase()}`}
+            cedisName={activeCedis?.name}
             rows={reports.refri}
             includeUda={true}
-            commentsCatalog={config.commentsCatalog}
+            commentsCatalog={activeConfig.commentsCatalog}
             selectedShiftId={selectedShiftId}
             onSelectShift={handleShiftChange}
             shiftCounts={shiftCounts}
@@ -499,12 +699,13 @@ export default function App() {
           />
         )}
 
-        {reports && activeTab === 'cajas' && (
+        {reports && viewMode === 'report' && reportTab === 'cajas' && (
           <ReportTable
             title={`LINEAS ELIMINADAS (CAJAS) • ${activeShiftObj.shortLabel.toUpperCase()}`}
+            cedisName={activeCedis?.name}
             rows={reports.cajas}
             includeUda={false}
-            commentsCatalog={config.commentsCatalog}
+            commentsCatalog={activeConfig.commentsCatalog}
             selectedShiftId={selectedShiftId}
             onSelectShift={handleShiftChange}
             shiftCounts={shiftCounts}

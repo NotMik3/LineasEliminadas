@@ -1,11 +1,11 @@
 import * as XLSX from 'xlsx';
 import { summarizeComments, summarizeOperacionUsers } from './lneProcessor';
 
-function buildSheet(title, shiftLabel, rows, includeUda = false) {
+function buildSheet(title, cedisName, shiftLabel, rows, includeUda = false) {
   const aoa = [
     [title],
     [],
-    [`CONTROL Y SEGUIMIENTO | ${shiftLabel || 'CEDIS SALTILLO'}`],
+    [`CONTROL Y SEGUIMIENTO • ${cedisName} | ${shiftLabel || 'GENERAL'}`],
     [],
   ];
 
@@ -96,23 +96,27 @@ function buildSheet(title, shiftLabel, rows, includeUda = false) {
   return ws;
 }
 
-export function exportLneWorkbook(reports, shiftLabel = '') {
+export function exportLneWorkbook(reports, cedisName = 'CEDIS SALTILLO', cedisCode = '', shiftLabel = '') {
   const wb = XLSX.utils.book_new();
+  const cedisFull = cedisCode ? `${cedisName} (${cedisCode})` : cedisName;
 
   const wsPiezas = buildSheet(
-    'LINEAS ELIMINADAS (PIEZAS) | CEDIS SALTILLO',
+    `LINEAS ELIMINADAS (PIEZAS) | ${cedisFull}`,
+    cedisFull,
     shiftLabel,
     reports.piezas,
     false
   );
   const wsRefri = buildSheet(
-    'LINEAS ELIMINADAS (REFRI) | CEDIS SALTILLO',
+    `LINEAS ELIMINADAS (REFRI) | ${cedisFull}`,
+    cedisFull,
     shiftLabel,
     reports.refri,
     true
   );
   const wsCajas = buildSheet(
-    'LINEAS ELIMINADAS (CAJAS) | CEDIS SALTILLO',
+    `LINEAS ELIMINADAS (CAJAS) | ${cedisFull}`,
+    cedisFull,
     shiftLabel,
     reports.cajas,
     false
@@ -123,5 +127,8 @@ export function exportLneWorkbook(reports, shiftLabel = '') {
   XLSX.utils.book_append_sheet(wb, wsCajas, 'LNE CAJAS');
 
   const today = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `Lineas_Eliminadas_SAL100_${today}.xlsx`);
+  const safeSlug = (cedisCode || cedisName || 'CEDIS')
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_');
+  XLSX.writeFile(wb, `Lineas_Eliminadas_${safeSlug}_${today}.xlsx`);
 }

@@ -1,18 +1,17 @@
-# Lineas eliminadas | CEDIS SALTILLO
+# Lineas eliminadas | Multi-CEDIS
 
-Aplicación web en React + Vite + Tailwind CSS + SheetJS (`xlsx`) para procesar reportes de líneas eliminadas / próximos a cero (`CancelacionPiezas` y `Config`).
+Aplicación web en React + Vite + Tailwind CSS + SheetJS (`xlsx`) para procesar reportes de líneas eliminadas / próximos a cero (`CancelacionPiezas` y `Config`) con soporte Multi-CEDIS.
 
-## Funciones incluidas (v4)
-- **Filtro por Turno o Vista General (Todos los turnos juntos):**
-  - `General (Todos los turnos)`
-  - `1er Turno (06:30 a 13:30)`
-  - `2do Turno (13:30 a 22:30)`
-  - `3er Turno (22:30 a 06:30)`
-- **Gráfica de Usuarios cuando se selecciona `"Operacion"`:**
-  - Al asignar el comentario **`Operacion`** (de forma individual o masiva), aparece automáticamente una gráfica y tabla con los **usuarios (`usuario`)** que acumulan líneas y registros eliminados bajo ese motivo.
-- **Ordenamiento y filtros por columna** en los encabezados de cada tabla.
-- **Catálogo homologado de comentarios** configurable + **asignación masiva** a filas seleccionadas.
-- **Histórico automático** de archivos Excel cargados en el navegador (`localStorage`).
+## Funciones incluidas (v5)
+- **Soporte Multi-CEDIS independiente:**
+  - Da de alta todos los CEDIS que necesites (ej. `CEDIS SALTILLO`, `CEDIS MONTERREY`, `CEDIS TORREÓN`, etc.).
+  - Cada CEDIS conserva su propia configuración independiente de **Pasillos Piezas**, **Pasillos Refri**, **Pasillos Cajas**, **Ítems UDA5** y **Catálogo de Comentarios Homologados** en el navegador (`localStorage`).
+- **Navegación directa y Reinicio limpio:**
+  - Botón **Inicio / Cargar Excel** siempre visible en la barra superior (incluso dentro de *Configuración* o *Histórico*) para regresar al instante sin perder ninguna configuración guardada.
+  - Botón **Reiniciar info** para limpiar los datos del reporte cargado manteniendo intactos todos los CEDIS y sus parámetros.
+- **Filtro por Turno o Vista General (`General`, `1er Turno`, `2do Turno`, `3er Turno`).**
+- **Gráfica automática de usuarios cuando se selecciona el comentario `"Operacion"`.**
+- **Histórico automático** de archivos Excel subidos identificado por CEDIS y turno.
 
 ## Instalación local
 

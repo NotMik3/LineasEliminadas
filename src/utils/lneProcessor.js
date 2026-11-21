@@ -12,12 +12,24 @@ export const DEFAULT_COMMENTS_CATALOG = [
   'Error de captura / sistema',
 ];
 
-export const DEFAULT_CONFIG = {
+export const createEmptyCedisConfig = () => ({
   piezas: [],
   refri: [],
   cajas: [],
   uda5: [],
-  commentsCatalog: DEFAULT_COMMENTS_CATALOG,
+  commentsCatalog: [...DEFAULT_COMMENTS_CATALOG],
+});
+
+export const DEFAULT_MULTI_CEDIS_STATE = {
+  activeCedisId: 'cedis-saltillo',
+  cedisList: [
+    {
+      id: 'cedis-saltillo',
+      name: 'CEDIS SALTILLO',
+      code: 'SAL100',
+      config: createEmptyCedisConfig(),
+    },
+  ],
 };
 
 export function normalizeCommentText(str) {
@@ -218,9 +230,6 @@ export function summarizeComments(reportRows) {
   return { list, sinComentario };
 }
 
-/**
- * Calcula los usuarios que acumulan líneas/eventos con el comentario "Operacion"
- */
 export function summarizeOperacionUsers(reportRows) {
   const userMap = new Map();
   let matchingLinesCount = 0;
