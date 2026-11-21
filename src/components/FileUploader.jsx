@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { UploadCloud, FileSpreadsheet, AlertCircle, Clock, Building2, Settings } from 'lucide-react';
 import { getShiftFromDate } from '../utils/shiftUtils';
+import { formatCedisDisplay } from '../utils/lneProcessor';
 
 export default function FileUploader({
   activeCedis,
@@ -26,9 +27,10 @@ export default function FileUploader({
     (activeCedis?.config?.refri?.length || 0) +
     (activeCedis?.config?.cajas?.length || 0);
 
+  const activeCedisLabel = formatCedisDisplay(activeCedis?.name);
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
-      {/* Barra superior: Selector de CEDIS + Turno en curso + Histórico */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="inline-flex items-center gap-2 bg-red-50 border border-red-200 text-oxxoRed px-3 py-1.5 rounded-lg text-xs font-bold">
@@ -41,7 +43,7 @@ export default function FileUploader({
             >
               {cedisList.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} {c.code ? `(${c.code})` : ''}
+                  {formatCedisDisplay(c.name)}
                 </option>
               ))}
             </select>
@@ -66,12 +68,11 @@ export default function FileUploader({
         </div>
       </div>
 
-      {/* Aviso si el CEDIS seleccionado aún no tiene pasillos configurados */}
       {totalConfiguredAisles === 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded-lg text-xs">
           <div>
             <p className="font-bold">
-              El perfil &quot;{activeCedis?.name}&quot; aún no tiene pasillos configurados.
+              El perfil &quot;{activeCedisLabel}&quot; aún no tiene pasillos configurados.
             </p>
             <p className="text-amber-800 mt-0.5">
               Puedes configurarlos ahora o subir un Excel que contenga la pestaña{' '}
@@ -85,12 +86,11 @@ export default function FileUploader({
             className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-3 py-1.5 rounded-lg transition"
           >
             <Settings className="w-3.5 h-3.5" />
-            Configurar {activeCedis?.name}
+            Configurar {activeCedisLabel}
           </button>
         </div>
       )}
 
-      {/* Zona Drag & Drop */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -121,7 +121,7 @@ export default function FileUploader({
         </div>
         <h2 className="text-lg font-bold text-slate-800">
           Sube tu archivo de Cancelación de Piezas para{' '}
-          <span className="text-oxxoRed">{activeCedis?.name}</span>
+          <span className="text-oxxoRed">{activeCedisLabel}</span>
         </h2>
         <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
           Arrastra aquí tu archivo <span className="font-semibold">.xlsx / .xlsm</span> con la hoja{' '}

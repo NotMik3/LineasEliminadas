@@ -10,12 +10,16 @@ import {
   XCircle,
   Users,
   Clock,
+  TrendingUp,
+  PackageSearch,
 } from 'lucide-react';
 import {
   summarizeComments,
   summarizeOperacionUsers,
+  summarizeTopImpactItems,
   DEFAULT_COMMENTS_CATALOG,
   isOperacionComment,
+  formatCedisDisplay,
 } from '../utils/lneProcessor';
 import { SHIFT_OPTIONS } from '../utils/shiftUtils';
 
@@ -31,7 +35,7 @@ const BAR_COLORS = [
 
 export default function ReportTable({
   title,
-  cedisName = 'CEDIS SALTILLO',
+  cedisName = 'Saltillo',
   rows,
   includeUda = false,
   commentsCatalog = DEFAULT_COMMENTS_CATALOG,
@@ -159,30 +163,47 @@ export default function ReportTable({
     });
   }, [rows, search, colFilters, sortConfig, includeUda]);
 
+  // Total de líneas filtradas en pantalla
   const grandTotal = useMemo(
-    () => processedRows.reduce((acc, r) => acc + r.sumaTotal, 0),
+    () => processedRows.reduce((acc, r) => acc + (Number(r.sumaTotal) || 0), 0),
     [processedRows]
   );
 
-  const { list: commentSummary, sinComentario } = useMemo(
-    () => summarizeComments(rows),
+  // KPI Total de Líneas de toda el área/turno activo (Suma de Total)
+  const kpiTotalLineas = useMemo(
+    () => rows.reduce((acc, r) => acc + (Number(r.sumaTotal) || 0), 0),
     [rows]
   );
 
-  const { users: operacionUsers, matchingLinesCount: operacionLinesCount } = useMemo(
-    () => summarizeOperacionUsers(rows),
-    [rows]
-  );
+  const {
+    list: commentSummary,
+    sinComentario,
+    sinComentarioLineas,
+  } = useMemo(() => summarizeComments(rows), [rows]);
 
-  const maxChartCount = useMemo(() => {
+  const {
+    users: operacionUsers,
+    matchingLinesCount: operacionLinesCount,
+    matchingEventsCount: operacionEventsCount,
+  } = useMemo(() => summarizeOperacionUsers(rows), [rows]);
+
+  // Top 10 Ítems que más impactan
+  const topImpactItems = useMemo(() => summarizeTopImpactItems(rows, 10), [rows]);
+
+  const maxChartLineasCount = useMemo(() => {
     if (commentSummary.length === 0) return 1;
-    return Math.max(...commentSummary.map((c) => c.totalItems));
+    return Math.max(...commentSummary.map((c) => c.totalLineas));
   }, [commentSummary]);
 
-  const maxUserLinesCount = useMemo(() => {
+  const maxUserEventsCount = useMemo(() => {
     if (operacionUsers.length === 0) return 1;
-    return Math.max(...operacionUsers.map((u) => u.lineas));
+    return Math.max(...operacionUsers.map((u) => u.eventos));
   }, [operacionUsers]);
+
+  const maxImpactItemLineas = useMemo(() => {
+    if (topImpactItems.length === 0) return 1;
+    return Math.max(...topImpactItems.map((it) => it.totalLineas));
+  }, [topImpactItems]);
 
   const allVisibleSelected =
     processedRows.length > 0 && processedRows.every((r) => selectedIds.has(r.id));
@@ -233,13 +254,17 @@ export default function ReportTable({
     return Array.from(set);
   }, [commentsCatalog, rows]);
 
+  const clasificadosLineas = kpiTotalLineas - sinComentarioLineas;
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl overflow-hidden shadow-sm border border-slate-200">
         <div className="bg-oxxoRed text-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base md:text-lg font-bold tracking-wide">{title}</h2>
-            <p className="text-xs text-red-100">CONTROL Y SEGUIMIENTO • {cedisName}</p>
+            <p className="text-xs text-red-100">
+              CONTROL Y SEGUIMIENTO • {formatCedisDisplay(cedisName).toUpperCase()}
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -319,12 +344,14 @@ export default function ReportTable({
         <div className="bg-oxxoDark text-white px-5 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex flex-wrap items-center gap-4">
             <span>
-              Mostrando: <strong className="text-oxxoYellow">{processedRows.length}</strong> de{' '}
-              {rows.length} ítems
+              Ítems únicos: <strong className="text-oxxoYellow">{processedRows.length}</strong> de{' '}
+              {rows.length}
             </span>
-            <span>
-              Suma de Total:{' '}
-              <strong className="text-oxxoYellow">{grandTotal.toLocaleString('es-MX')}</strong>
+            <span className="inline-flex items-center gap-1.5 bg-oxxoRed/80 px-2.5 py-0.5 rounded font-bold">
+              KPI Total Líneas:{' '}
+              <strong className="text-oxxoYellow text-sm">
+                {grandTotal.toLocaleString('es-MX')}
+              </strong>
             </span>
             {hasActiveFilters && (
               <button
@@ -338,10 +365,10 @@ export default function ReportTable({
             )}
           </div>
 
-          {operacionLinesCount > 0 && (
+          {operacionEventsCount > 0 && (
             <span className="inline-flex items-center gap-1.5 bg-red-600/30 border border-red-400/40 text-amber-200 px-2.5 py-0.5 rounded font-semibold">
               <Users className="w-3.5 h-3.5 text-oxxoYellow" />
-              {operacionLinesCount} {operacionLinesCount === 1 ? 'línea marcada' : 'líneas marcadas'} como &quot;Operacion&quot;
+              {operacionEventsCount.toLocaleString('es-MX')} líneas ({operacionLinesCount} ítems) en &quot;Operacion&quot;
             </span>
           )}
         </div>
@@ -391,13 +418,14 @@ export default function ReportTable({
         </div>
       )}
 
+      {/* Grid: Tabla + Panel lateral de KPI y Gráficas */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         <div
           className={`${
             showSummary ? 'lg:col-span-8' : 'lg:col-span-12'
           } bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden`}
         >
-          <div className="overflow-x-auto max-h-[70vh]">
+          <div className="overflow-x-auto max-h-[75vh]">
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-oxxoDark text-white sticky top-0 z-10 select-none">
                 <tr>
@@ -633,9 +661,9 @@ export default function ReportTable({
                   <tr>
                     <td></td>
                     <td colSpan={includeUda ? 5 : 4} className="py-2.5 px-3">
-                      Total general
+                      Total general de líneas
                     </td>
-                    <td className="py-2.5 px-3 text-right">
+                    <td className="py-2.5 px-3 text-right text-oxxoRed text-sm">
                       {grandTotal.toLocaleString('es-MX')}
                     </td>
                     <td className="py-2.5 px-3"></td>
@@ -646,33 +674,70 @@ export default function ReportTable({
           </div>
         </div>
 
-        {/* Panel lateral: Gráfica de Comentarios + Gráfica de Usuarios ("Operacion") */}
+        {/* Panel lateral derecho: KPI Total de Líneas + Gráfica Comentarios + Top Ítems + Usuarios Operacion */}
         {showSummary && (
           <div className="lg:col-span-4 space-y-4">
+            {/* TARJETA KPI PRINCIPAL: TOTAL DE LÍNEAS */}
+            <div className="rounded-xl shadow-sm border-2 border-oxxoRed bg-gradient-to-br from-oxxoRed to-red-800 text-white p-4">
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-amber-200">
+                  <TrendingUp className="w-4 h-4 text-oxxoYellow" />
+                  Indicador Principal (KPI)
+                </span>
+                <span className="text-[11px] bg-black/25 px-2 py-0.5 rounded-full font-semibold">
+                  {rows.length} ítems distintos
+                </span>
+              </div>
+
+              <div className="mt-2 flex items-baseline justify-between gap-2">
+                <div>
+                  <p className="text-3xl md:text-4xl font-black tracking-tight text-white">
+                    {kpiTotalLineas.toLocaleString('es-MX')}
+                  </p>
+                  <p className="text-xs font-semibold text-red-100 mt-0.5">
+                    Total de líneas eliminadas
+                  </p>
+                </div>
+
+                <div className="text-right text-[11px] bg-black/20 rounded-lg px-2.5 py-1.5">
+                  <span className="block text-red-200">Clasificadas</span>
+                  <span className="font-bold text-oxxoYellow">
+                    {clasificadosLineas.toLocaleString('es-MX')} / {kpiTotalLineas.toLocaleString('es-MX')}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* TARJETA 1: GRÁFICA POR COMENTARIO (ENFOCADA EN TOTAL DE LÍNEAS) */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="bg-oxxoDark text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold">
                 <span className="flex items-center gap-2">
                   <BarChart3 className="w-4 h-4 text-oxxoYellow" />
                   Gráfica por Comentario
                 </span>
-                <span className="text-[11px] font-normal text-slate-300">
-                  {rows.length - sinComentario}/{rows.length} clasificados
+                <span className="text-[11px] font-bold text-oxxoYellow">
+                  Total: {kpiTotalLineas.toLocaleString('es-MX')} líneas
                 </span>
               </div>
 
               <div className="p-4 space-y-4">
                 {commentSummary.length === 0 ? (
                   <div className="text-center py-6 text-xs text-slate-400">
-                    Selecciona comentarios en la tabla (individual o masivamente) para generar la
-                    gráfica automáticamente.
+                    Selecciona comentarios en la tabla para distribuir las{' '}
+                    <strong className="text-slate-600">
+                      {kpiTotalLineas.toLocaleString('es-MX')} líneas
+                    </strong>{' '}
+                    por motivo.
                   </div>
                 ) : (
                   <>
                     <div className="space-y-3">
                       {commentSummary.map((item, idx) => {
-                        const pctOfMax = Math.round((item.totalItems / maxChartCount) * 100);
-                        const pctOfTotal =
-                          rows.length > 0 ? ((item.totalItems / rows.length) * 100).toFixed(1) : 0;
+                        const pctOfMax = Math.round((item.totalLineas / maxChartLineasCount) * 100);
+                        const pctOfTotalLineas =
+                          kpiTotalLineas > 0
+                            ? ((item.totalLineas / kpiTotalLineas) * 100).toFixed(1)
+                            : 0;
                         const barColor = isOperacionComment(item.comentario)
                           ? 'bg-oxxoRed'
                           : BAR_COLORS[(idx + 1) % BAR_COLORS.length];
@@ -684,9 +749,9 @@ export default function ReportTable({
                                 {item.comentario}
                               </span>
                               <span className="font-bold text-slate-900 whitespace-nowrap">
-                                {item.totalItems}{' '}
+                                {item.totalLineas.toLocaleString('es-MX')} líneas{' '}
                                 <span className="text-[11px] font-normal text-slate-500">
-                                  ({pctOfTotal}%)
+                                  ({pctOfTotalLineas}%)
                                 </span>
                               </span>
                             </div>
@@ -707,6 +772,7 @@ export default function ReportTable({
                           <tr className="border-b border-slate-200 text-slate-500">
                             <th className="py-1.5 px-2 text-left font-semibold">Motivo</th>
                             <th className="py-1.5 px-2 text-right font-semibold">Ítems</th>
+                            <th className="py-1.5 px-2 text-right font-semibold">Líneas</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -723,12 +789,15 @@ export default function ReportTable({
                               className="cursor-pointer hover:bg-slate-50"
                             >
                               <td className="py-1.5 px-2 text-slate-700">{item.comentario}</td>
-                              <td className="py-1.5 px-2 text-right font-bold text-oxxoRed">
+                              <td className="py-1.5 px-2 text-right text-slate-500">
                                 {item.totalItems}
+                              </td>
+                              <td className="py-1.5 px-2 text-right font-bold text-oxxoRed">
+                                {item.totalLineas.toLocaleString('es-MX')}
                               </td>
                             </tr>
                           ))}
-                          {sinComentario > 0 && (
+                          {sinComentarioLineas > 0 && (
                             <tr
                               onClick={() =>
                                 handleColFilterChange(
@@ -740,13 +809,23 @@ export default function ReportTable({
                               }
                               className="cursor-pointer hover:bg-slate-50 text-slate-400 italic"
                             >
-                              <td className="py-1.5 px-2">Sin comentario asignado</td>
+                              <td className="py-1.5 px-2">Sin comentario</td>
+                              <td className="py-1.5 px-2 text-right">{sinComentario}</td>
                               <td className="py-1.5 px-2 text-right font-semibold">
-                                {sinComentario}
+                                {sinComentarioLineas.toLocaleString('es-MX')}
                               </td>
                             </tr>
                           )}
                         </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-800">
+                            <td className="py-1.5 px-2">Total KPI Líneas</td>
+                            <td className="py-1.5 px-2 text-right">{rows.length}</td>
+                            <td className="py-1.5 px-2 text-right text-oxxoRed">
+                              {kpiTotalLineas.toLocaleString('es-MX')}
+                            </td>
+                          </tr>
+                        </tfoot>
                       </table>
                     </div>
                   </>
@@ -754,6 +833,77 @@ export default function ReportTable({
               </div>
             </div>
 
+            {/* TARJETA 2: GRÁFICA DE TOP ÍTEMS QUE MÁS IMPACTAN (ITEM + DESCRIPCIÓN) */}
+            {topImpactItems.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="bg-oxxoDark text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold">
+                  <span className="flex items-center gap-2">
+                    <PackageSearch className="w-4 h-4 text-oxxoYellow" />
+                    Top Ítems de Mayor Impacto
+                  </span>
+                  <span className="text-[11px] font-normal text-slate-300">
+                    Top {topImpactItems.length}
+                  </span>
+                </div>
+
+                <div className="p-4 space-y-3">
+                  <p className="text-[11px] text-slate-500">
+                    Artículos con mayor acumulación de líneas eliminadas (clic para filtrar):
+                  </p>
+
+                  <div className="space-y-3">
+                    {topImpactItems.map((it, idx) => {
+                      const pctOfMax = Math.round((it.totalLineas / maxImpactItemLineas) * 100);
+                      const pctOfKpi =
+                        kpiTotalLineas > 0
+                          ? ((it.totalLineas / kpiTotalLineas) * 100).toFixed(1)
+                          : 0;
+
+                      return (
+                        <div
+                          key={it.key}
+                          onClick={() =>
+                            handleColFilterChange(
+                              'item',
+                              colFilters.item === it.item ? '' : it.item
+                            )
+                          }
+                          title="Clic para filtrar este ítem en la tabla"
+                          className="cursor-pointer group space-y-1 p-1.5 -mx-1.5 rounded-lg hover:bg-slate-50 transition"
+                        >
+                          <div className="flex items-start justify-between gap-2 text-xs">
+                            <div className="min-w-0">
+                              <span className="inline-block font-mono font-bold text-oxxoRed bg-red-50 px-1.5 py-0.2 rounded mr-1.5">
+                                #{idx + 1} • {it.item}
+                              </span>
+                              <span className="font-semibold text-slate-800 group-hover:text-oxxoRed transition break-words">
+                                {it.producto}
+                              </span>
+                            </div>
+
+                            <span className="font-bold text-slate-900 whitespace-nowrap shrink-0">
+                              {it.totalLineas.toLocaleString('es-MX')}{' '}
+                              <span className="text-[11px] font-normal text-slate-500">
+                                ({pctOfKpi}%)
+                              </span>
+                            </span>
+                          </div>
+
+                          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-amber-500 group-hover:bg-oxxoRed rounded-full transition-all duration-300"
+                              style={{ width: `${Math.max(pctOfMax, 8)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TARJETA 3: GRÁFICA DE USUARIOS CUANDO SE DETECTA "OPERACION" */}
             {operacionUsers.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm border-2 border-oxxoRed/80 overflow-hidden">
                 <div className="bg-oxxoRed text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold">
@@ -762,7 +912,7 @@ export default function ReportTable({
                     Usuarios con &quot;Operacion&quot;
                   </span>
                   <span className="bg-black/25 px-2 py-0.5 rounded text-[11px]">
-                    {operacionLinesCount} {operacionLinesCount === 1 ? 'línea' : 'líneas'}
+                    {operacionEventsCount.toLocaleString('es-MX')} líneas
                   </span>
                 </div>
 
@@ -773,7 +923,7 @@ export default function ReportTable({
 
                   <div className="space-y-3">
                     {operacionUsers.map((u) => {
-                      const pctOfMax = Math.round((u.lineas / maxUserLinesCount) * 100);
+                      const pctOfMax = Math.round((u.eventos / maxUserEventsCount) * 100);
                       return (
                         <div key={u.usuario} className="space-y-1">
                           <div className="flex items-center justify-between text-xs">
@@ -781,9 +931,10 @@ export default function ReportTable({
                               {u.usuario}
                             </span>
                             <span className="font-bold text-oxxoRed whitespace-nowrap">
-                              {u.lineas} {u.lineas === 1 ? 'línea' : 'líneas'}{' '}
+                              {u.eventos.toLocaleString('es-MX')}{' '}
+                              {u.eventos === 1 ? 'línea' : 'líneas'}{' '}
                               <span className="text-[11px] font-normal text-slate-500">
-                                ({u.eventos} reg.)
+                                ({u.lineas} ítems)
                               </span>
                             </span>
                           </div>
@@ -803,8 +954,8 @@ export default function ReportTable({
                       <thead>
                         <tr className="border-b border-slate-200 text-slate-500">
                           <th className="py-1.5 px-2 text-left font-semibold">Usuario</th>
+                          <th className="py-1.5 px-2 text-right font-semibold">Ítems</th>
                           <th className="py-1.5 px-2 text-right font-semibold">Líneas</th>
-                          <th className="py-1.5 px-2 text-right font-semibold">Total Reg.</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -818,10 +969,10 @@ export default function ReportTable({
                             <td className="py-1.5 px-2 font-semibold text-slate-700">
                               {u.usuario}
                             </td>
+                            <td className="py-1.5 px-2 text-right text-slate-600">{u.lineas}</td>
                             <td className="py-1.5 px-2 text-right font-bold text-oxxoRed">
-                              {u.lineas}
+                              {u.eventos.toLocaleString('es-MX')}
                             </td>
-                            <td className="py-1.5 px-2 text-right text-slate-600">{u.eventos}</td>
                           </tr>
                         ))}
                       </tbody>

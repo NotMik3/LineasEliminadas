@@ -24,12 +24,14 @@ import {
   extractConfigFromWorkbook,
   parseBaseRecords,
   runLneAnalysis,
+  formatAppPageTitle,
+  formatCedisDisplay,
 } from './utils/lneProcessor';
 import { exportLneWorkbook } from './utils/excelExporter';
 import { detectDominantShift, SHIFT_OPTIONS } from './utils/shiftUtils';
 
-const MULTI_CEDIS_STORAGE_KEY = 'lne_multi_cedis_state_v5';
-const HISTORY_STORAGE_KEY = 'lne_multi_cedis_history_v5';
+const MULTI_CEDIS_STORAGE_KEY = 'lne_multi_cedis_state_v7';
+const HISTORY_STORAGE_KEY = 'lne_multi_cedis_history_v7';
 const MAX_HISTORY_ITEMS = 25;
 
 export default function App() {
@@ -62,9 +64,7 @@ export default function App() {
   const [selectedShiftId, setSelectedShiftId] = useState('ALL');
   const [commentsStore, setCommentsStore] = useState({});
   const [reports, setReports] = useState(null);
-  // viewMode: 'home' | 'report' | 'config' | 'history'
   const [viewMode, setViewMode] = useState('home');
-  // reportTab: 'piezas' | 'refri' | 'cajas'
   const [reportTab, setReportTab] = useState('piezas');
   const [error, setError] = useState('');
 
@@ -90,6 +90,10 @@ export default function App() {
       cedisState.cedisList[0]
     );
   }, [cedisState]);
+
+  useEffect(() => {
+    document.title = formatAppPageTitle(activeCedis?.name);
+  }, [activeCedis]);
 
   const activeConfig = activeCedis?.config || createEmptyCedisConfig();
 
@@ -147,7 +151,6 @@ export default function App() {
     );
   };
 
-  // Cambiar de CEDIS activo y recalcular si hay datos cargados
   const handleSelectCedis = (newCedisId) => {
     const targetCedis = cedisState.cedisList.find((c) => c.id === newCedisId);
     if (!targetCedis) return;
@@ -161,12 +164,11 @@ export default function App() {
     }
   };
 
-  const handleAddCedis = (name, code) => {
+  const handleAddCedis = (name) => {
     const newId = `cedis_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const newCedis = {
       id: newId,
       name,
-      code,
       config: createEmptyCedisConfig(),
     };
     setCedisState((prev) => ({
@@ -180,11 +182,11 @@ export default function App() {
     }
   };
 
-  const handleUpdateCedisMeta = (cedisId, { name, code }) => {
+  const handleUpdateCedisName = (cedisId, name) => {
     setCedisState((prev) => ({
       ...prev,
       cedisList: prev.cedisList.map((c) =>
-        c.id === cedisId ? { ...c, name: name || c.name, code } : c
+        c.id === cedisId ? { ...c, name: name || c.name } : c
       ),
     }));
   };
@@ -194,7 +196,7 @@ export default function App() {
     const target = cedisState.cedisList.find((c) => c.id === cedisId);
     if (
       !window.confirm(
-        `¿Seguro que deseas eliminar "${target?.name}" y su configuración de pasillos?`
+        `¿Seguro que deseas eliminar "${formatCedisDisplay(target?.name)}" y su configuración de pasillos?`
       )
     ) {
       return;
@@ -269,7 +271,6 @@ export default function App() {
           id: newEntryId,
           cedisId: activeCedis.id,
           cedisName: activeCedis.name,
-          cedisCode: activeCedis.code,
           fileName: file.name,
           uploadedAt: new Date().toISOString(),
           shift: dominantShift,
@@ -406,7 +407,6 @@ export default function App() {
     setActiveHistoryId(null);
   };
 
-  // Reiniciar información cargada y volver al inicio SIN borrar la configuración de ningún CEDIS
   const handleResetAndGoHome = () => {
     setBaseRecords(null);
     setReports(null);
@@ -419,7 +419,6 @@ export default function App() {
     setViewMode('home');
   };
 
-  // Volver al inicio o al reporte activo sin perder datos
   const handleBackFromSubpage = () => {
     if (reports) {
       setViewMode('report');
@@ -435,7 +434,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Navbar principal */}
       <header className="bg-oxxoRed text-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
@@ -455,10 +453,9 @@ export default function App() {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base md:text-lg font-extrabold tracking-tight leading-tight">
-                  Lineas eliminadas | {activeCedis?.name || 'CEDIS'}
+                  {formatAppPageTitle(activeCedis?.name)}
                 </h1>
 
-                {/* Selector rápido de CEDIS en el encabezado */}
                 <span className="inline-flex items-center gap-1 bg-white/15 border border-white/30 px-2 py-0.5 rounded text-[11px] font-bold">
                   <Building2 className="w-3 h-3 text-oxxoYellow" />
                   <select
@@ -469,7 +466,7 @@ export default function App() {
                   >
                     {cedisState.cedisList.map((c) => (
                       <option key={c.id} value={c.id} className="text-slate-900">
-                        {c.name} {c.code ? `(${c.code})` : ''}
+                        {formatCedisDisplay(c.name)}
                       </option>
                     ))}
                   </select>
@@ -503,9 +500,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Botones de navegación y acciones */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Botón siempre disponible para volver al Inicio */}
             <button
               type="button"
               onClick={() => setViewMode(reports ? 'report' : 'home')}
@@ -552,7 +547,6 @@ export default function App() {
                   exportLneWorkbook(
                     reports,
                     activeCedis?.name,
-                    activeCedis?.code,
                     activeShiftObj.label
                   )
                 }
@@ -563,7 +557,6 @@ export default function App() {
               </button>
             )}
 
-            {/* Botón Reiniciar información y volver al inicio conservando configuración */}
             <button
               type="button"
               onClick={handleResetAndGoHome}
@@ -577,9 +570,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Contenido principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6 space-y-6">
-        {/* Pestañas de áreas cuando se está viendo el reporte */}
         {reports && viewMode === 'report' && (
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
             <button
@@ -592,7 +583,7 @@ export default function App() {
               }`}
             >
               <Layers className="w-4 h-4" />
-              LNE PIEZAS ({reports.piezas.length})
+              LNE PIEZAS ({reports.piezas.reduce((a, b) => a + (b.sumaTotal || 0), 0)} líneas)
             </button>
 
             <button
@@ -605,7 +596,7 @@ export default function App() {
               }`}
             >
               <Snowflake className="w-4 h-4" />
-              LNE REFRI ({reports.refri.length})
+              LNE REFRI ({reports.refri.reduce((a, b) => a + (b.sumaTotal || 0), 0)} líneas)
             </button>
 
             <button
@@ -618,12 +609,11 @@ export default function App() {
               }`}
             >
               <Package className="w-4 h-4" />
-              LNE CAJAS ({reports.cajas.length})
+              LNE CAJAS ({reports.cajas.reduce((a, b) => a + (b.sumaTotal || 0), 0)} líneas)
             </button>
           </div>
         )}
 
-        {/* Vista Histórico */}
         {viewMode === 'history' && (
           <HistoryPanel
             history={history}
@@ -636,14 +626,13 @@ export default function App() {
           />
         )}
 
-        {/* Vista Configuración Multi-CEDIS */}
         {viewMode === 'config' && (
           <ConfigPanel
             cedisList={cedisState.cedisList}
             activeCedis={activeCedis}
             onSelectCedis={handleSelectCedis}
             onAddCedis={handleAddCedis}
-            onUpdateCedisMeta={handleUpdateCedisMeta}
+            onUpdateCedisName={handleUpdateCedisName}
             onDeleteCedis={handleDeleteCedis}
             onSaveConfig={handleSaveCedisConfig}
             onResetDefaults={(cedisId) =>
@@ -654,7 +643,6 @@ export default function App() {
           />
         )}
 
-        {/* Vista Inicio / Carga de Excel */}
         {viewMode === 'home' && (
           <FileUploader
             activeCedis={activeCedis}
@@ -668,7 +656,6 @@ export default function App() {
           />
         )}
 
-        {/* Vistas de Reporte */}
         {reports && viewMode === 'report' && reportTab === 'piezas' && (
           <ReportTable
             title={`LINEAS ELIMINADAS (PIEZAS) • ${activeShiftObj.shortLabel.toUpperCase()}`}

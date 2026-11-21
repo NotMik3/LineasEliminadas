@@ -9,6 +9,7 @@ import {
   Building2,
   ArrowLeft,
 } from 'lucide-react';
+import { formatCedisDisplay } from '../utils/lneProcessor';
 
 export default function HistoryPanel({
   history,
@@ -89,7 +90,7 @@ export default function HistoryPanel({
                     <div className="flex flex-wrap items-center justify-between gap-1.5">
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-red-100 text-oxxoRed">
                         <Building2 className="w-3 h-3" />
-                        {entry.cedisName || 'CEDIS SALTILLO'}
+                        {formatCedisDisplay(entry.cedisName || 'Saltillo')}
                       </span>
 
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-oxxoDark text-white">

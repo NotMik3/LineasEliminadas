@@ -10,14 +10,14 @@ import {
   Trash2,
   ArrowLeft,
 } from 'lucide-react';
-import { DEFAULT_COMMENTS_CATALOG } from '../utils/lneProcessor';
+import { DEFAULT_COMMENTS_CATALOG, formatCedisDisplay } from '../utils/lneProcessor';
 
 export default function ConfigPanel({
   cedisList,
   activeCedis,
   onSelectCedis,
   onAddCedis,
-  onUpdateCedisMeta,
+  onUpdateCedisName,
   onDeleteCedis,
   onSaveConfig,
   onResetDefaults,
@@ -25,7 +25,6 @@ export default function ConfigPanel({
   hasLoadedReport,
 }) {
   const [cedisName, setCedisName] = useState('');
-  const [cedisCode, setCedisCode] = useState('');
   const [piezasText, setPiezasText] = useState('');
   const [refriText, setRefriText] = useState('');
   const [cajasText, setCajasText] = useState('');
@@ -33,16 +32,13 @@ export default function ConfigPanel({
   const [commentsText, setCommentsText] = useState('');
   const [savedNotice, setSavedNotice] = useState(false);
 
-  // Modal / formulario rápido para agregar nuevo CEDIS
   const [showNewForm, setShowNewForm] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newCode, setNewCode] = useState('');
 
   useEffect(() => {
     if (!activeCedis) return;
     const cfg = activeCedis.config || {};
     setCedisName(activeCedis.name || '');
-    setCedisCode(activeCedis.code || '');
     setPiezasText((cfg.piezas || []).join('\n'));
     setRefriText((cfg.refri || []).join('\n'));
     setCajasText((cfg.cajas || []).join('\n'));
@@ -67,10 +63,7 @@ export default function ConfigPanel({
       parsedComments.unshift('Operacion');
     }
 
-    onUpdateCedisMeta(activeCedis.id, {
-      name: cedisName.trim() || activeCedis.name,
-      code: cedisCode.trim().toUpperCase(),
-    });
+    onUpdateCedisName(activeCedis.id, cedisName.trim() || activeCedis.name);
 
     onSaveConfig(activeCedis.id, {
       piezas: parseLines(piezasText),
@@ -88,15 +81,13 @@ export default function ConfigPanel({
     e.preventDefault();
     const cleanName = newName.trim();
     if (!cleanName) return;
-    onAddCedis(cleanName, newCode.trim().toUpperCase());
+    onAddCedis(cleanName);
     setNewName('');
-    setNewCode('');
     setShowNewForm(false);
   };
 
   return (
     <div className="space-y-5">
-      {/* Barra superior de navegación de regreso */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-xl shadow-sm border border-slate-200 px-5 py-3.5">
         <button
           type="button"
@@ -112,7 +103,6 @@ export default function ConfigPanel({
         </p>
       </div>
 
-      {/* Gestor Multi-CEDIS */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-200">
           <div className="flex items-center gap-2.5">
@@ -124,7 +114,7 @@ export default function ConfigPanel({
                 Catálogo de CEDIS ({cedisList.length})
               </h2>
               <p className="text-xs text-slate-500">
-                Selecciona un CEDIS para editar sus pasillos o agrega nuevas plazas.
+                Selecciona un CEDIS para editar sus pasillos o agrega nuevos CEDIS.
               </p>
             </div>
           </div>
@@ -139,13 +129,12 @@ export default function ConfigPanel({
           </button>
         </div>
 
-        {/* Formulario inline para dar de alta otro CEDIS */}
         {showNewForm && (
           <form
             onSubmit={handleCreateCedis}
             className="mb-4 bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-end gap-3"
           >
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 min-w-[220px]">
               <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
                 Nombre del CEDIS *
               </label>
@@ -154,21 +143,8 @@ export default function ConfigPanel({
                 required
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="Ej: CEDIS MONTERREY"
+                placeholder="Ej: Monterrey"
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-oxxoRed"
-              />
-            </div>
-
-            <div className="w-40">
-              <label className="block text-[11px] font-bold uppercase text-slate-600 mb-1">
-                Clave / Plaza
-              </label>
-              <input
-                type="text"
-                value={newCode}
-                onChange={(e) => setNewCode(e.target.value)}
-                placeholder="Ej: MTY100"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-mono uppercase focus:outline-none focus:ring-2 focus:ring-oxxoRed"
               />
             </div>
 
@@ -190,7 +166,6 @@ export default function ConfigPanel({
           </form>
         )}
 
-        {/* Tarjetas seleccionables de los CEDIS existentes */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {cedisList.map((cedis) => {
             const isSelected = cedis.id === activeCedis?.id;
@@ -210,14 +185,9 @@ export default function ConfigPanel({
                 }`}
               >
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-xs text-slate-800">{cedis.name}</span>
-                    {cedis.code && (
-                      <span className="text-[10px] font-mono font-bold bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">
-                        {cedis.code}
-                      </span>
-                    )}
-                  </div>
+                  <span className="font-bold text-xs text-slate-800 block">
+                    {formatCedisDisplay(cedis.name)}
+                  </span>
                   <p className="text-[11px] text-slate-500 mt-1">
                     {totalPasillos} pasillos • {cedis.config?.uda5?.length || 0} UDA5
                   </p>
@@ -242,7 +212,6 @@ export default function ConfigPanel({
         </div>
       </div>
 
-      {/* Formulario de parámetros del CEDIS seleccionado */}
       <form onSubmit={handleSave} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-5 border-b border-slate-200">
           <div className="flex items-center gap-2.5">
@@ -251,7 +220,8 @@ export default function ConfigPanel({
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-800">
-                Configuración de: <span className="text-oxxoRed">{activeCedis?.name}</span>
+                Configuración de:{' '}
+                <span className="text-oxxoRed">{formatCedisDisplay(activeCedis?.name)}</span>
               </h2>
               <p className="text-xs text-slate-500">
                 Un valor por línea. Estos parámetros aplican exclusivamente al CEDIS seleccionado.
@@ -284,34 +254,25 @@ export default function ConfigPanel({
           </div>
         </div>
 
-        {/* Datos identificadores del CEDIS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Nombre del CEDIS
-            </label>
-            <input
-              type="text"
-              value={cedisName}
-              onChange={(e) => setCedisName(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-oxxoRed"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-              Clave / Plaza
-            </label>
-            <input
-              type="text"
-              value={cedisCode}
-              onChange={(e) => setCedisCode(e.target.value)}
-              placeholder="Ej: SAL100"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-mono uppercase focus:outline-none focus:ring-2 focus:ring-oxxoRed"
-            />
-          </div>
+        <div className="mb-5 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 max-w-md">
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+            Nombre del CEDIS
+          </label>
+          <input
+            type="text"
+            value={cedisName}
+            onChange={(e) => setCedisName(e.target.value)}
+            placeholder="Ej: Saltillo"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-oxxoRed"
+          />
+          <p className="text-[11px] text-slate-400 mt-1">
+            Se mostrará como:{' '}
+            <strong className="text-slate-600">
+              Lineas Eliminadas | {formatCedisDisplay(cedisName)}
+            </strong>
+          </p>
         </div>
 
-        {/* 5 columnas de listas */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">

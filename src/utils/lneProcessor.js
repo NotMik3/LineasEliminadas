@@ -20,13 +20,25 @@ export const createEmptyCedisConfig = () => ({
   commentsCatalog: [...DEFAULT_COMMENTS_CATALOG],
 });
 
+export function formatCedisDisplay(rawName) {
+  const clean = String(rawName || '').trim();
+  if (!clean) return 'Cedis Saltillo';
+  if (/^cedis\b/i.test(clean)) {
+    return clean.replace(/^cedis\b/i, 'Cedis');
+  }
+  return `Cedis ${clean}`;
+}
+
+export function formatAppPageTitle(rawName) {
+  return `Lineas Eliminadas | ${formatCedisDisplay(rawName)}`;
+}
+
 export const DEFAULT_MULTI_CEDIS_STATE = {
   activeCedisId: 'cedis-saltillo',
   cedisList: [
     {
       id: 'cedis-saltillo',
-      name: 'CEDIS SALTILLO',
-      code: 'SAL100',
+      name: 'Saltillo',
       config: createEmptyCedisConfig(),
     },
   ],
@@ -213,30 +225,38 @@ export function runLneAnalysis(baseRecords, config, selectedShiftId = 'ALL') {
 export function summarizeComments(reportRows) {
   const counts = new Map();
   let sinComentario = 0;
+  let sinComentarioLineas = 0;
 
   for (const row of reportRows) {
     const c = String(row.comentario || '').trim();
+    const suma = Number(row.sumaTotal) || 1;
     if (!c) {
       sinComentario += 1;
+      sinComentarioLineas += suma;
       continue;
     }
-    counts.set(c, (counts.get(c) || 0) + 1);
+    const prev = counts.get(c) || { comentario: c, totalItems: 0, totalLineas: 0 };
+    prev.totalItems += 1;
+    prev.totalLineas += suma;
+    counts.set(c, prev);
   }
 
-  const list = Array.from(counts.entries())
-    .map(([comentario, totalItems]) => ({ comentario, totalItems }))
-    .sort((a, b) => b.totalItems - a.totalItems);
+  const list = Array.from(counts.values()).sort(
+    (a, b) => b.totalLineas - a.totalLineas || b.totalItems - a.totalItems
+  );
 
-  return { list, sinComentario };
+  return { list, sinComentario, sinComentarioLineas };
 }
 
 export function summarizeOperacionUsers(reportRows) {
   const userMap = new Map();
   let matchingLinesCount = 0;
+  let matchingEventsCount = 0;
 
   for (const row of reportRows) {
     if (!isOperacionComment(row.comentario)) continue;
     matchingLinesCount += 1;
+    matchingEventsCount += Number(row.sumaTotal) || 1;
 
     const breakdown = row.userBreakdown || {};
     const entries = Object.entries(breakdown);
@@ -257,8 +277,50 @@ export function summarizeOperacionUsers(reportRows) {
   }
 
   const users = Array.from(userMap.values()).sort(
-    (a, b) => b.lineas - a.lineas || b.eventos - a.eventos
+    (a, b) => b.eventos - a.eventos || b.lineas - a.lineas
   );
 
-  return { users, matchingLinesCount };
+  return { users, matchingLinesCount, matchingEventsCount };
+}
+
+/**
+ * Agrupa y ordena los ítems que más impactan (por código Item + Descripción)
+ */
+export function summarizeTopImpactItems(reportRows, limit = 10) {
+  const itemMap = new Map();
+
+  for (const row of reportRows) {
+    const code = String(row.item || '').trim() || 'SIN ITEM';
+    const desc = String(row.producto || '').trim() || 'Sin descripción';
+    const key = `${code}||${desc}`;
+    const suma = Number(row.sumaTotal) || 1;
+
+    if (itemMap.has(key)) {
+      const existing = itemMap.get(key);
+      existing.totalLineas += suma;
+      existing.filas += 1;
+      if (row.pivote && !existing.pivotes.includes(row.pivote)) {
+        existing.pivotes.push(row.pivote);
+      }
+      if (row.comentario && !existing.comentarios.includes(row.comentario)) {
+        existing.comentarios.push(row.comentario);
+      }
+    } else {
+      itemMap.set(key, {
+        key,
+        item: code,
+        producto: desc,
+        totalLineas: suma,
+        filas: 1,
+        pivotes: row.pivote ? [row.pivote] : [],
+        comentarios: row.comentario ? [row.comentario] : [],
+      });
+    }
+  }
+
+  const sorted = Array.from(itemMap.values()).sort(
+    (a, b) => b.totalLineas - a.totalLineas || b.filas - a.filas
+  );
+
+  return sorted.slice(0, limit);
 }

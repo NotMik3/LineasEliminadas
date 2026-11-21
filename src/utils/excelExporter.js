@@ -1,11 +1,16 @@
 import * as XLSX from 'xlsx';
-import { summarizeComments, summarizeOperacionUsers } from './lneProcessor';
+import {
+  summarizeComments,
+  summarizeOperacionUsers,
+  summarizeTopImpactItems,
+  formatCedisDisplay,
+} from './lneProcessor';
 
-function buildSheet(title, cedisName, shiftLabel, rows, includeUda = false) {
+function buildSheet(title, cedisDisplay, shiftLabel, rows, includeUda = false) {
   const aoa = [
     [title],
     [],
-    [`CONTROL Y SEGUIMIENTO • ${cedisName} | ${shiftLabel || 'GENERAL'}`],
+    [`CONTROL Y SEGUIMIENTO • ${cedisDisplay} | ${shiftLabel || 'GENERAL'}`],
     [],
   ];
 
@@ -38,28 +43,45 @@ function buildSheet(title, cedisName, shiftLabel, rows, includeUda = false) {
     { s: { r: 2, c: 0 }, e: { r: 2, c: 8 } },
   ];
 
+  // Resumen por Comentario (incluyendo Total de Líneas)
   const { list: summary } = summarizeComments(rows);
+  let nextRow = 5;
   if (summary.length > 0) {
     XLSX.utils.sheet_add_aoa(
       ws,
       [
-        ['Comentario', 'Total Ítems'],
-        ...summary.map((s) => [s.comentario, s.totalItems]),
+        ['Comentario', 'Ítems', 'Total Líneas'],
+        ...summary.map((s) => [s.comentario, s.totalItems, s.totalLineas]),
       ],
-      { origin: 'K5' }
+      { origin: `K${nextRow}` }
     );
+    nextRow += summary.length + 3;
   }
 
+  // Usuarios con "Operacion"
   const { users: operacionUsers } = summarizeOperacionUsers(rows);
   if (operacionUsers.length > 0) {
-    const startRow = summary.length > 0 ? 5 + summary.length + 3 : 5;
     XLSX.utils.sheet_add_aoa(
       ws,
       [
-        ['Usuario ("Operacion")', 'Líneas'],
-        ...operacionUsers.map((u) => [u.usuario, u.lineas]),
+        ['Usuario ("Operacion")', 'Ítems', 'Total Líneas'],
+        ...operacionUsers.map((u) => [u.usuario, u.lineas, u.eventos]),
       ],
-      { origin: `K${startRow}` }
+      { origin: `K${nextRow}` }
+    );
+    nextRow += operacionUsers.length + 3;
+  }
+
+  // Top Ítems con mayor impacto
+  const topItems = summarizeTopImpactItems(rows, 10);
+  if (topItems.length > 0) {
+    XLSX.utils.sheet_add_aoa(
+      ws,
+      [
+        ['Top Item', 'Descripción', 'Total Líneas'],
+        ...topItems.map((it) => [it.item, it.producto, it.totalLineas]),
+      ],
+      { origin: `K${nextRow}` }
     );
   }
 
@@ -76,6 +98,7 @@ function buildSheet(title, cedisName, shiftLabel, rows, includeUda = false) {
         { wch: 4 },
         { wch: 4 },
         { wch: 24 },
+        { wch: 34 },
         { wch: 14 },
       ]
     : [
@@ -90,33 +113,34 @@ function buildSheet(title, cedisName, shiftLabel, rows, includeUda = false) {
         { wch: 4 },
         { wch: 4 },
         { wch: 24 },
+        { wch: 34 },
         { wch: 14 },
       ];
 
   return ws;
 }
 
-export function exportLneWorkbook(reports, cedisName = 'CEDIS SALTILLO', cedisCode = '', shiftLabel = '') {
+export function exportLneWorkbook(reports, cedisRawName = 'Saltillo', shiftLabel = '') {
   const wb = XLSX.utils.book_new();
-  const cedisFull = cedisCode ? `${cedisName} (${cedisCode})` : cedisName;
+  const cedisDisplay = formatCedisDisplay(cedisRawName);
 
   const wsPiezas = buildSheet(
-    `LINEAS ELIMINADAS (PIEZAS) | ${cedisFull}`,
-    cedisFull,
+    `LINEAS ELIMINADAS (PIEZAS) | ${cedisDisplay}`,
+    cedisDisplay,
     shiftLabel,
     reports.piezas,
     false
   );
   const wsRefri = buildSheet(
-    `LINEAS ELIMINADAS (REFRI) | ${cedisFull}`,
-    cedisFull,
+    `LINEAS ELIMINADAS (REFRI) | ${cedisDisplay}`,
+    cedisDisplay,
     shiftLabel,
     reports.refri,
     true
   );
   const wsCajas = buildSheet(
-    `LINEAS ELIMINADAS (CAJAS) | ${cedisFull}`,
-    cedisFull,
+    `LINEAS ELIMINADAS (CAJAS) | ${cedisDisplay}`,
+    cedisDisplay,
     shiftLabel,
     reports.cajas,
     false
@@ -127,7 +151,7 @@ export function exportLneWorkbook(reports, cedisName = 'CEDIS SALTILLO', cedisCo
   XLSX.utils.book_append_sheet(wb, wsCajas, 'LNE CAJAS');
 
   const today = new Date().toISOString().slice(0, 10);
-  const safeSlug = (cedisCode || cedisName || 'CEDIS')
+  const safeSlug = cedisDisplay
     .replace(/[^a-zA-Z0-9_-]/g, '_')
     .replace(/_+/g, '_');
   XLSX.writeFile(wb, `Lineas_Eliminadas_${safeSlug}_${today}.xlsx`);
