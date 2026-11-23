@@ -261,14 +261,13 @@ export default function StoresModule({
   const handleBulkPasteSubmit = (e) => {
     e.preventDefault();
     const lines = bulkText
-      .split(/?
-/)
+      .split(/\r?\n/)
       .map((l) => l.trim())
       .filter(Boolean);
 
     const parsedItems = [];
     for (const line of lines) {
-      const parts = line.includes('	') ? line.split('	') : line.split(',');
+      const parts = line.includes('\t') ? line.split('\t') : line.split(',');
       const clean = parts.map((p) => p.trim());
       if (clean.length === 1) {
         parsedItems.push({
