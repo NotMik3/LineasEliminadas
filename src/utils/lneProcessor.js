@@ -29,8 +29,8 @@ export function formatCedisDisplay(rawName) {
   return `Cedis ${clean}`;
 }
 
-export function formatAppPageTitle(rawName) {
-  return `Lineas Eliminadas | ${formatCedisDisplay(rawName)}`;
+export function formatAppPageTitle(rawName, modulePrefix = 'Lineas Eliminadas') {
+  return `${modulePrefix} | ${formatCedisDisplay(rawName)}`;
 }
 
 export const DEFAULT_MULTI_CEDIS_STATE = {
@@ -283,9 +283,6 @@ export function summarizeOperacionUsers(reportRows) {
   return { users, matchingLinesCount, matchingEventsCount };
 }
 
-/**
- * Agrupa y ordena los ítems que más impactan (por código Item + Descripción)
- */
 export function summarizeTopImpactItems(reportRows, limit = 10) {
   const itemMap = new Map();
 

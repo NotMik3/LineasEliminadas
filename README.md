@@ -1,13 +1,16 @@
-# Lineas Eliminadas | Cedis
+# Portal Operativo CEDIS (Líneas Eliminadas + Tiendas Cerradas y Aperturas)
 
-Aplicación web en React + Vite + Tailwind CSS + SheetJS (`xlsx`) para procesar reportes de líneas eliminadas (`CancelacionPiezas` y `Config`).
+Aplicación web en React + Vite + Tailwind CSS + SheetJS (`xlsx`) lista para GitHub y Vercel.
 
-## Funciones incluidas (v7)
-- **KPI Principal destacado (`Total de Líneas`):** Tarjeta de indicador principal visible en el panel de gráficas mostrando el total de líneas eliminadas (tanto en ítems únicos como el acumulado de líneas) con desglose por comentario y porcentaje.
-- **Gráfica de Top Ítems con mayor impacto:** Gráfica y tabla ranking con código de `Item`, descripción (`Producto`), `Pivote` y total de líneas eliminadas para identificar de inmediato los productos que más impactan.
-- **Gráfica de Usuarios con `"Operacion"`:** Acumulado de líneas y registros por usuario cuando se selecciona el comentario `Operacion`.
-- **Título y pestaña dinámicos por CEDIS (`Lineas Eliminadas | Cedis <Nombre>`).**
-- **Filtro por Turno (`General`, `1er Turno`, `2do Turno`, `3er Turno`)**, ordenamiento y filtros por columna, asignación masiva de comentarios e histórico.
+## Módulos principales
+1. **Líneas Eliminadas (`LNE`):**
+   - Procesamiento de `CancelacionPiezas` y `Config` por CEDIS (`Cedis Saltillo`, etc.).
+   - Filtro por turno (`General`, `1er Turno`, `2do Turno`, `3er Turno`), KPI Total de Líneas, Top Ítems de mayor impacto y gráfica de usuarios con `"Operacion"`.
+   - Histórico local de cargas y exportación a `.xlsx`.
+2. **Tiendas Cerradas y Aperturas:**
+   - Lectura directa de `TIENDAS CERRADAS` y `APERTURAS` (ignorando la pestaña `TIENDAS SIN CERVEZA` del Excel).
+   - **Catálogo editable de Tiendas Sin Cerveza:** Permite capturar, editar o eliminar manualmente las tiendas (`RETEK`, `TIENDA`, `PLAZA`, `MOTIVO`) que no deben llevar cerveza desde la app.
+   - **KPIs y Gráficas:** Total de tiendas cerradas por motivo/plaza, cálculo dinámico de días transcurridos, aperturas programadas (`PENDIENTE` vs `ENTREGADA`), filtros por columna y exportación a `.xlsx`.
 
 ## Instalación local
 

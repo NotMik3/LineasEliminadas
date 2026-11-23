@@ -43,7 +43,6 @@ function buildSheet(title, cedisDisplay, shiftLabel, rows, includeUda = false) {
     { s: { r: 2, c: 0 }, e: { r: 2, c: 8 } },
   ];
 
-  // Resumen por Comentario (incluyendo Total de Líneas)
   const { list: summary } = summarizeComments(rows);
   let nextRow = 5;
   if (summary.length > 0) {
@@ -58,7 +57,6 @@ function buildSheet(title, cedisDisplay, shiftLabel, rows, includeUda = false) {
     nextRow += summary.length + 3;
   }
 
-  // Usuarios con "Operacion"
   const { users: operacionUsers } = summarizeOperacionUsers(rows);
   if (operacionUsers.length > 0) {
     XLSX.utils.sheet_add_aoa(
@@ -72,7 +70,6 @@ function buildSheet(title, cedisDisplay, shiftLabel, rows, includeUda = false) {
     nextRow += operacionUsers.length + 3;
   }
 
-  // Top Ítems con mayor impacto
   const topItems = summarizeTopImpactItems(rows, 10);
   if (topItems.length > 0) {
     XLSX.utils.sheet_add_aoa(
